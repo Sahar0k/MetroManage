@@ -132,7 +132,7 @@ export interface DashboardStats {
   totalDepartments: number;
 }
 
-// === Рабочее место поверителя ===
+// === Регистрация поверок (упрощённая форма без ручного ввода точек) ===
 
 export interface VerificationPoint {
   id: string;
