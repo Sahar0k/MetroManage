@@ -9,7 +9,7 @@ import { unlockAudio } from './utils/audio';
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Instruments = lazy(() => import('./pages/Instruments'));
 const Verification = lazy(() => import('./pages/Verification'));
-const VerificationRegistry = lazy(() => import('./pages/VerificationRegistry'));
+
 const IssueReturn = lazy(() => import('./pages/IssueReturn'));
 const Personnel = lazy(() => import('./pages/Personnel'));
 const OperationsLog = lazy(() => import('./pages/OperationsLog'));
@@ -85,7 +85,7 @@ function AppContent() {
       case 'dashboard': return <Dashboard theme={theme} onNavigate={handleNavigate} />;
       case 'instruments': return <Instruments theme={theme} userId={userId} userRole={userRole} initialFilter={currentFilter} onNavigate={handleNavigate} />;
       case 'verification': return <Verification theme={theme} onNavigate={handleNavigate} />;
-      case 'verification-registry': return <VerificationRegistry theme={theme} userId={userId} />;
+
       case 'issue-return': return <IssueReturn theme={theme} userId={userId} userRole={userRole} initialInstrumentId={initialInstrumentId} />;
       case 'personnel': return <Personnel theme={theme} userId={userId} userRole={userRole} />;
       case 'operations': return <OperationsLog theme={theme} />;
