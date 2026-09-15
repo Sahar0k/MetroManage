@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
 import { store } from '../store';
-import { MeasuringInstrument } from '../types';
+import { MeasuringInstrument, VerificationProtocol } from '../types';
 import { formatDate } from '../utils/domain';
 import { X, Edit2, Trash2, FileText, ArrowRightLeft, Package, Calendar, MapPin, CheckCircle2, AlertCircle, Clock, Cpu, Info, FileCheck, History, Wrench as WrenchIcon } from 'lucide-react';
+import { InstrumentHistory } from './verification';
 
 interface InstrumentDetailModalProps {
   instrument: MeasuringInstrument;
@@ -24,6 +25,18 @@ const TABS: { id: TabId; label: string; icon: any }[] = [
   { id: 'maintenance', label: 'Обслуживание', icon: WrenchIcon },
 ];
 
+interface InstrumentDetailModalProps {
+  instrument: MeasuringInstrument;
+  onClose: () => void;
+  onEdit: (instrument: MeasuringInstrument) => void;
+  onDelete: (instrument: MeasuringInstrument) => void;
+  onIssue: (instrument: MeasuringInstrument) => void;
+  onReturn: (instrument: MeasuringInstrument) => void;
+  onCreateCard: (instrument: MeasuringInstrument) => void;
+  onViewSimilar?: (instrument: MeasuringInstrument) => void;
+  onViewProtocol?: (protocol: VerificationProtocol) => void;
+}
+
 function Logo() {
   return (
     <div className="relative w-11 h-11 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center flex-shrink-0 shadow-lg shadow-cyan-500/20">
@@ -32,7 +45,7 @@ function Logo() {
   );
 }
 
-export default function InstrumentDetailModal({ instrument, onClose, onEdit, onDelete, onIssue, onReturn, onCreateCard, onViewSimilar }: InstrumentDetailModalProps) {
+export default function InstrumentDetailModal({ instrument, onClose, onEdit, onDelete, onIssue, onReturn, onCreateCard, onViewSimilar, onViewProtocol }: InstrumentDetailModalProps) {
   const [activeTab, setActiveTab] = useState<TabId>('main');
   const warehouses = store.getWarehouses();
   const allInstruments = store.getInstruments();
@@ -180,7 +193,13 @@ export default function InstrumentDetailModal({ instrument, onClose, onEdit, onD
               )}
             </div>
           )}
-          {activeTab !== 'main' && (
+          {activeTab === 'history' && (
+            <div className="p-8">
+              <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2"><History size={20} className="text-cyan-400" />История прибора</h3>
+              <InstrumentHistory instrument={instrument} isDark={true} onViewProtocol={onViewProtocol} />
+            </div>
+          )}
+          {activeTab !== 'main' && activeTab !== 'history' && (
             <div className="p-16 text-center">
               <div className="w-16 h-16 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center mx-auto mb-4">
                 {(() => { const tab = TABS.find(t => t.id === activeTab); const Icon = tab?.icon || Info; return <Icon size={28} className="text-slate-500" />; })()}

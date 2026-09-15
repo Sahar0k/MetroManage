@@ -36,3 +36,25 @@ html.dark, html.dark body {
 .fixed {
   animation: fadeIn 0.15s ease-out;
 }
+
+/* Стили для печати */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .print-mode, .print-mode * {
+    visibility: visible;
+  }
+  .print-mode {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .print-view {
+    page-break-after: always;
+  }
+}
