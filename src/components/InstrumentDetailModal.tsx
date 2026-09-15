@@ -87,22 +87,20 @@ export default function InstrumentDetailModal({ instrument, onClose, onEdit, onD
     <div onClick={onClose} className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
       <div onClick={(e) => e.stopPropagation()} className="bg-slate-900 rounded-2xl max-w-6xl w-full my-8 shadow-2xl border border-slate-800 overflow-hidden">
         <div className="relative bg-gradient-to-br from-slate-900 via-slate-900 to-slate-800 border-b border-slate-800 px-8 py-6">
-          <div className="flex items-start justify-between gap-6">
-            <div className="flex items-start gap-5 min-w-0">
-              <Logo />
-              <div className="min-w-0 pt-0.5">
-                <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wider mb-1">Учёт средств измерений</p>
-                <h1 className="text-2xl font-bold text-white truncate">Карточка {instrument.category} {instrument.type}</h1>
-                <div className="flex items-center gap-3 mt-2 text-xs text-slate-400">
-                  <span className="font-mono">Инв. №{instrument.inventoryNumber}</span>
-                  <span className="text-slate-600">•</span>
-                  <span>{instrument.manufacturer}</span>
-                  <span className="text-slate-600">•</span>
-                  <span>S/N: {instrument.serialNumber}</span>
-                </div>
+          <button onClick={onClose} className="absolute top-4 right-4 p-2 rounded-lg bg-slate-800 hover:bg-red-600 transition-colors z-10"><X size={24} className="text-white" /></button>
+          <div className="flex items-start gap-5 min-w-0 pr-12">
+            <Logo />
+            <div className="min-w-0 pt-0.5">
+              <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wider mb-1">Учёт средств измерений</p>
+              <h1 className="text-2xl font-bold text-white truncate">Карточка {instrument.category} {instrument.type}</h1>
+              <div className="flex items-center gap-3 mt-2 text-xs text-slate-400">
+                <span className="font-mono">Инв. №{instrument.inventoryNumber}</span>
+                <span className="text-slate-600">•</span>
+                <span>{instrument.manufacturer}</span>
+                <span className="text-slate-600">•</span>
+                <span>S/N: {instrument.serialNumber}</span>
               </div>
             </div>
-            <button onClick={onClose} className="p-2 rounded-lg hover:bg-slate-800 transition-colors flex-shrink-0"><X size={20} className="text-slate-400" /></button>
           </div>
           <div className="flex items-center gap-1 mt-6 -mb-6 overflow-x-auto">
             {TABS.map(tab => {
