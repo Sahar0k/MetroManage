@@ -1,13 +1,19 @@
 import { useState, useEffect } from 'react';
 import { useNotification } from '../contexts/NotificationContext';
 import { playSuccess, playError } from '../utils/audio';
-import { Settings, Download, Upload, Wifi, WifiOff, Database, RefreshCw } from 'lucide-react';
+import { Settings, Download, Upload, Wifi, WifiOff, Database, RefreshCw, Server, HardDrive } from 'lucide-react';
 import {
   isGosreestrAccessEnabled,
   setGosreestrAccessEnabled,
   checkCacheFreshness,
 } from '../services/gosreestrService';
 import { indexedDBCache } from '../services/indexedDBCache';
+import {
+  getStorageConfig,
+  switchStorageSource,
+  checkServerConnection,
+  StorageSourceType,
+} from '../services/storage';
 
 interface SettingsPageProps {
   theme: 'dark' | 'light';
@@ -18,6 +24,12 @@ export default function SettingsPage({ theme }: SettingsPageProps) {
   const [isChecking, setIsChecking] = useState(false);
   const [checkProgress, setCheckProgress] = useState({ current: 0, total: 0 });
   const [cacheStats, setCacheStats] = useState({ cards: 0, lastUpdate: 0 });
+  
+  // Источник данных
+  const [storageSource, setStorageSource] = useState<StorageSourceType>('local');
+  const [pocketbaseUrl, setPocketbaseUrl] = useState('http://127.0.0.1:8090');
+  const [isCheckingConnection, setIsCheckingConnection] = useState(false);
+  const [serverStatus, setServerStatus] = useState<'unknown' | 'connected' | 'disconnected'>('unknown');
 
   const notification = useNotification();
   const isDark = theme === 'dark';
@@ -25,6 +37,7 @@ export default function SettingsPage({ theme }: SettingsPageProps) {
   useEffect(() => {
     loadSettings();
     loadCacheStats();
+    loadStorageConfig();
   }, []);
 
   const loadSettings = async () => {
@@ -41,6 +54,61 @@ export default function SettingsPage({ theme }: SettingsPageProps) {
       setCacheStats({ cards: cards.length, lastUpdate });
     } catch {
       setCacheStats({ cards: 0, lastUpdate: 0 });
+    }
+  };
+
+  const loadStorageConfig = () => {
+    const config = getStorageConfig();
+    setStorageSource(config.type);
+    if (config.pocketbaseUrl) {
+      setPocketbaseUrl(config.pocketbaseUrl);
+    }
+  };
+
+  const handleCheckConnection = async () => {
+    setIsCheckingConnection(true);
+    try {
+      const result = await checkServerConnection(pocketbaseUrl);
+      if (result.success) {
+        setServerStatus('connected');
+        playSuccess();
+        notification.success('Соединение установлено', result.version ? `Версия PocketBase: ${result.version}` : 'Сервер доступен');
+      } else {
+        setServerStatus('disconnected');
+        playError();
+        notification.error('Сервер недоступен', result.error || 'Не удалось подключиться');
+      }
+    } catch (error) {
+      setServerStatus('disconnected');
+      playError();
+      notification.error('Ошибка', 'Не удалось проверить соединение');
+    } finally {
+      setIsCheckingConnection(false);
+    }
+  };
+
+  const handleSwitchStorage = async () => {
+    if (storageSource === 'pocketbase') {
+      // Сначала проверяем соединение
+      const connectionResult = await checkServerConnection(pocketbaseUrl);
+      if (!connectionResult.success) {
+        playError();
+        notification.error('Сервер недоступен', 'Невозможно переключиться на серверный режим');
+        return;
+      }
+    }
+
+    const result = await switchStorageSource(storageSource, storageSource === 'pocketbase' ? pocketbaseUrl : undefined);
+    
+    if (result.success) {
+      playSuccess();
+      notification.success(
+        'Источник данных изменён',
+        storageSource === 'local' ? 'Переключено на локальное хранилище' : `Переключено на сервер: ${pocketbaseUrl}`
+      );
+    } else {
+      playError();
+      notification.error('Ошибка переключения', result.error || 'Не удалось переключить источник данных');
     }
   };
 
@@ -191,6 +259,115 @@ export default function SettingsPage({ theme }: SettingsPageProps) {
               </div>
             </div>
           )}
+        </div>
+      </div>
+
+      {/* Источник данных */}
+      <div className={`rounded-xl p-6 ${isDark ? 'bg-slate-800' : 'bg-white'}`}>
+        <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+          <Server size={20} className="text-cyan-400" />
+          Источник данных
+        </h3>
+        
+        <div className="space-y-4">
+          <div>
+            <p className="font-medium mb-3">Режим хранения данных</p>
+            <div className="space-y-2">
+              <label className={`flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-colors ${
+                storageSource === 'local' ? 'border-cyan-500 bg-cyan-500/10' : 'border-slate-600 bg-slate-700/30'
+              }`}>
+                <input
+                  type="radio"
+                  name="storageSource"
+                  value="local"
+                  checked={storageSource === 'local'}
+                  onChange={() => setStorageSource('local')}
+                  className="w-4 h-4"
+                />
+                <HardDrive size={20} className="text-slate-400" />
+                <div className="flex-1">
+                  <p className="font-medium">Локально (браузер)</p>
+                  <p className="text-xs text-slate-400">Данные хранятся в localStorage браузера</p>
+                </div>
+              </label>
+
+              <label className={`flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-colors ${
+                storageSource === 'pocketbase' ? 'border-cyan-500 bg-cyan-500/10' : 'border-slate-600 bg-slate-700/30'
+              }`}>
+                <input
+                  type="radio"
+                  name="storageSource"
+                  value="pocketbase"
+                  checked={storageSource === 'pocketbase'}
+                  onChange={() => setStorageSource('pocketbase')}
+                  className="w-4 h-4"
+                />
+                <Server size={20} className="text-slate-400" />
+                <div className="flex-1">
+                  <p className="font-medium">Сервер (PocketBase)</p>
+                  <p className="text-xs text-slate-400">Данные хранятся на сервере PocketBase</p>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          {storageSource === 'pocketbase' && (
+            <div className="space-y-3">
+              <div>
+                <label className="text-sm text-slate-400 mb-1 block">URL сервера PocketBase</label>
+                <input
+                  type="text"
+                  value={pocketbaseUrl}
+                  onChange={(e) => setPocketbaseUrl(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-slate-600 text-white text-sm"
+                  placeholder="http://127.0.0.1:8090"
+                />
+              </div>
+
+              <button
+                onClick={handleCheckConnection}
+                disabled={isCheckingConnection}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-slate-700 text-slate-300 rounded-lg text-sm font-medium hover:bg-slate-600 disabled:opacity-50"
+              >
+                {isCheckingConnection ? (
+                  <>
+                    <RefreshCw size={16} className="animate-spin" />
+                    Проверка соединения...
+                  </>
+                ) : (
+                  <>
+                    <Wifi size={16} />
+                    Проверить соединение
+                  </>
+                )}
+              </button>
+
+              {serverStatus === 'connected' && (
+                <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
+                  <p className="text-sm text-emerald-400 flex items-center gap-2">
+                    <Wifi size={16} />
+                    Сервер доступен
+                  </p>
+                </div>
+              )}
+
+              {serverStatus === 'disconnected' && (
+                <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30">
+                  <p className="text-sm text-red-400 flex items-center gap-2">
+                    <WifiOff size={16} />
+                    Сервер недоступен
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          <button
+            onClick={handleSwitchStorage}
+            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-cyan-500 text-white rounded-lg text-sm font-medium hover:bg-cyan-600"
+          >
+            Применить
+          </button>
         </div>
       </div>
 

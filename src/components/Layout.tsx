@@ -3,7 +3,8 @@ import { store, scannerStatus } from '../store';
 import { User, MeasuringInstrument } from '../types';
 import { getRoleLabel } from '../utils/domain';
 import { unlockAudio } from '../utils/audio';
-import { LayoutDashboard, Wrench, ArrowLeftRight, Users, ScrollText, Radio, LogIn, LogOut, Menu, X, Calendar, Search, Upload, Settings, ClipboardCheck } from 'lucide-react';
+import { LayoutDashboard, Wrench, ArrowLeftRight, Users, ScrollText, Radio, LogIn, LogOut, Menu, X, Calendar, Search, Upload, Settings, ClipboardCheck, HardDrive, Server, WifiOff, Database } from 'lucide-react';
+import { getStorageConfig } from '../services/storage';
 import SearchContextMenu from './SearchContextMenu';
 import InstrumentDetailModal from './InstrumentDetailModal';
 import InstrumentCard from './InstrumentCard';
@@ -23,6 +24,7 @@ const ALL_NAV_ITEMS = [
   { id: 'scanner', label: 'Терминал', icon: Radio, roles: ['metrologist'] },
   { id: 'import', label: 'Импорт реестра', icon: Upload, roles: ['metrologist'] },
   { id: 'settings', label: 'Настройки', icon: Settings, roles: ['metrologist'] },
+  { id: 'migration', label: 'Перенос данных', icon: Database, roles: ['metrologist'] },
 ];
 
 export default function Layout({ children, currentPage, onNavigate, onUserChange, onDataSourceClick }: LayoutProps) {
@@ -39,8 +41,19 @@ export default function Layout({ children, currentPage, onNavigate, onUserChange
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [cardInstrument, setCardInstrument] = useState<MeasuringInstrument | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<{ type: 'delete' | 'issue' | 'return'; instrument: MeasuringInstrument } | null>(null);
+  const [storageSource, setStorageSource] = useState<'local' | 'pocketbase'>('local');
+  const [pocketbaseUrl, setPocketbaseUrl] = useState<string>('');
 
   useEffect(() => { document.documentElement.className = 'dark'; }, []);
+  
+  useEffect(() => {
+    const config = getStorageConfig();
+    setStorageSource(config.type);
+    if (config.pocketbaseUrl) {
+      setPocketbaseUrl(config.pocketbaseUrl);
+    }
+  }, []);
+  
   useEffect(() => { if (user?.role !== 'metrologist') return; const unsubscribe = scannerStatus.subscribe(() => { setScannerOnline(scannerStatus.isOnline()); }); return unsubscribe; }, [user?.role]);
 
   useEffect(() => {
@@ -136,6 +149,22 @@ export default function Layout({ children, currentPage, onNavigate, onUserChange
             ))}
           </nav>
           <div className="p-3 border-t border-slate-700 space-y-3">
+            {/* Индикатор источника данных */}
+            <div className="px-3 py-2 mb-2">
+              {storageSource === 'local' ? (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-700/50">
+                  <HardDrive size={14} className="text-slate-400" />
+                  <span className="text-xs text-slate-400">Данные: ЛОКАЛЬНО</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
+                  <Server size={14} className="text-emerald-400" />
+                  <span className="text-xs text-emerald-400">Данные: СЕРВЕР</span>
+                  {pocketbaseUrl && <span className="text-xs text-slate-400 truncate">{pocketbaseUrl}</span>}
+                </div>
+              )}
+            </div>
+
             {user ? (
               <div className="space-y-2">
                 <div className="px-3 py-2 rounded-lg bg-slate-700/50"><p className="text-sm font-medium">{user.fullName}</p><p className="text-xs text-cyan-500">{getRoleLabel(user.role)}</p></div>
