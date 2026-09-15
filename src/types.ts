@@ -134,6 +134,19 @@ export interface DashboardStats {
 
 // === Регистрация поверок (упрощённая форма без ручного ввода точек) ===
 
+export interface VerificationSendoff {
+  id: string;
+  instrumentId: string;
+  destination: string;
+  sentAt: string;
+  responsibleId: string | null;
+  expectedReturnDate: string | null;
+  status: 'sent' | 'returned';
+  returnedAt: string | null;
+  protocolId: string | null;
+  comment: string;
+}
+
 export interface VerificationPoint {
   id: string;
   name: string;                    // Название точки (например, "100 В DC")

@@ -11,12 +11,17 @@ import { v4 as uuidv4 } from 'uuid';
 import { calculateNextVerification, formatDate, formatDateTime } from '../utils/domain';
 import { indexedDBCache } from '../services/indexedDBCache';
 
+import { sendToVerification, completeSendoff, getActiveSendoff, getSendoffsForInstrument } from '../services/verificationFlowService';
+
 interface VerificationRegistrationProps {
   theme: 'dark' | 'light';
   userId: string | null;
+  prefillInstrumentId?: string | null;
+  prefillComment?: string | null;
+  prefillSendoffId?: string | null;
 }
 
-export default function VerificationRegistration({ theme, userId }: VerificationRegistrationProps) {
+export default function VerificationRegistration({ theme, userId, prefillInstrumentId, prefillComment, prefillSendoffId }: VerificationRegistrationProps) {
   const [protocols, setProtocols] = useState<VerificationProtocol[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [viewingProtocol, setViewingProtocol] = useState<VerificationProtocol | null>(null);
@@ -116,6 +121,9 @@ export default function VerificationRegistration({ theme, userId }: Verification
           onSave={() => { setShowForm(false); refresh(); }}
           onClose={() => setShowForm(false)}
           notification={notification}
+          prefillInstrumentId={prefillInstrumentId}
+          prefillComment={prefillComment}
+          prefillSendoffId={prefillSendoffId}
         />
       )}
 
@@ -154,17 +162,20 @@ interface RegistrationFormProps {
   onSave: () => void;
   onClose: () => void;
   notification: any;
+  prefillInstrumentId?: string | null;
+  prefillComment?: string | null;
+  prefillSendoffId?: string | null;
 }
 
-function RegistrationForm({ instruments, employees, userId, isDark, inputClass, onSave, onClose, notification }: RegistrationFormProps) {
-  const [deviceId, setDeviceId] = useState('');
+function RegistrationForm({ instruments, employees, userId, isDark, inputClass, onSave, onClose, notification, prefillInstrumentId, prefillComment, prefillSendoffId }: RegistrationFormProps) {
+  const [deviceId, setDeviceId] = useState(prefillInstrumentId || '');
   const [verificationDate, setVerificationDate] = useState(new Date().toISOString().split('T')[0]);
   const [operatorId, setOperatorId] = useState(userId || '');
   const [result, setResult] = useState<'pass' | 'fail'>('pass');
   const [protocolNumber, setProtocolNumber] = useState('');
   const [protocolFile, setProtocolFile] = useState<{ name: string; data: string } | null>(null);
   const [nextVerificationDate, setNextVerificationDate] = useState('');
-  const [comment, setComment] = useState('');
+  const [comment, setComment] = useState(prefillComment || '');
 
   const selectedInstrument = useMemo(() => instruments.find(i => i.id === deviceId), [instruments, deviceId]);
 
@@ -241,6 +252,11 @@ function RegistrationForm({ instruments, employees, userId, isDark, inputClass, 
 
       // Добавляем протокол
       const newProtocol = store.addProtocol(protocol);
+
+      // Если это возврат с поверки, связываем с отправкой
+      if (prefillSendoffId) {
+        completeSendoff(prefillSendoffId, newProtocol.id, userId || '');
+      }
 
       // Обновляем жизненный цикл СИ
       if (result === 'pass') {

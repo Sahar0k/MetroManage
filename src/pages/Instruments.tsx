@@ -12,8 +12,9 @@ import CategoryBuilder from '../components/CategoryBuilder';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { useGosreestrSearch } from '../hooks/useGosreestrSearch';
 import { fetchCardWithCache, mapToInstrument, downloadAttachment, isGosreestrAccessEnabled } from '../services/gosreestrService';
+import { sendToVerification, getActiveSendoff, getOverdueSendoffs, getSendoffsForInstrument } from '../services/verificationFlowService';
 
-interface InstrumentsProps { theme: 'dark' | 'light'; userId: string | null; userRole: Role; initialFilter?: string; onNavigate?: (page: string, filter?: string, instrumentId?: string) => void; }
+interface InstrumentsProps { theme: 'dark' | 'light'; userId: string | null; userRole: Role; initialFilter?: string; onNavigate?: (page: string, filter?: string, instrumentId?: string, comment?: string, sendoffId?: string) => void; }
 
 export default function Instruments({ theme, userId, userRole, initialFilter, onNavigate }: InstrumentsProps) {
   const [instruments, setInstruments] = useState(store.getInstruments());
@@ -223,16 +224,20 @@ export default function Instruments({ theme, userId, userRole, initialFilter, on
           <table className="w-full min-w-[800px] text-sm">
             <thead className={isDark ? 'bg-slate-800' : 'bg-slate-50'}><tr><th className="text-left px-4 py-3 font-medium">Инв. №</th><th className="text-left px-4 py-3 font-medium">Наименование</th><th className="text-left px-4 py-3 font-medium hidden md:table-cell">Тип</th><th className="text-left px-4 py-3 font-medium hidden lg:table-cell">Склад</th><th className="text-left px-4 py-3 font-medium hidden lg:table-cell">След. поверка</th><th className="text-left px-4 py-3 font-medium">Статус</th></tr></thead>
             <tbody className={`divide-y ${isDark ? 'divide-slate-700' : 'divide-slate-100'}`}>
-              {filtered.map(item => (
-                <tr key={item.id} onClick={() => setSelectedInstrument(item)} className={`${isDark ? 'hover:bg-slate-800/50' : 'hover:bg-slate-50'} transition-colors cursor-pointer`}>
-                  <td className="px-4 py-3 font-mono text-cyan-500">{item.inventoryNumber}</td>
-                  <td className="px-4 py-3"><div className="font-medium">{item.name}</div><div className="text-xs text-slate-400">{item.range} | {item.accuracy}</div></td>
-                  <td className="px-4 py-3 hidden md:table-cell">{item.type}</td>
-                  <td className="px-4 py-3 hidden lg:table-cell"><span className="text-xs flex items-center gap-1 text-purple-400"><Package size={12} />{warehouses.find(w => w.id === item.warehouseId)?.name || '—'}</span></td>
-                  <td className="px-4 py-3 hidden lg:table-cell">{formatDate(item.nextVerificationDate)}</td>
-                  <td className="px-4 py-3">{getStatusBadge(item)}</td>
-                </tr>
-              ))}
+              {filtered.map(item => {
+                const activeSendoff = getActiveSendoff(item.id);
+                const isOverdue = activeSendoff && activeSendoff.expectedReturnDate && new Date(activeSendoff.expectedReturnDate) < new Date();
+                return (
+                  <tr key={item.id} onClick={() => setSelectedInstrument(item)} className={`${isDark ? 'hover:bg-slate-800/50' : 'hover:bg-slate-50'} transition-colors cursor-pointer ${isOverdue ? 'bg-amber-500/10' : ''}`}>
+                    <td className="px-4 py-3 font-mono text-cyan-500">{item.inventoryNumber}</td>
+                    <td className="px-4 py-3"><div className="font-medium">{item.name}</div><div className="text-xs text-slate-400">{item.range} | {item.accuracy}</div></td>
+                    <td className="px-4 py-3 hidden md:table-cell">{item.type}</td>
+                    <td className="px-4 py-3 hidden lg:table-cell"><span className="text-xs flex items-center gap-1 text-purple-400"><Package size={12} />{warehouses.find(w => w.id === item.warehouseId)?.name || '—'}</span></td>
+                    <td className="px-4 py-3 hidden lg:table-cell">{formatDate(item.nextVerificationDate)}</td>
+                    <td className="px-4 py-3">{getStatusBadge(item)}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

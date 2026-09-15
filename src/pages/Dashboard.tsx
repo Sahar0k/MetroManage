@@ -1,8 +1,10 @@
-import { useMemo, useCallback } from 'react';
+import { useMemo, useCallback, useEffect } from 'react';
 import { store } from '../store';
 import { isVerificationExpired, isVerificationDueSoon } from '../utils/domain';
 import { AlertTriangle, Clock, Wrench, Calendar, TrendingUp } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend } from 'recharts';
+import { getOverdueSendoffs } from '../services/verificationFlowService';
+import { useNotification } from '../contexts/NotificationContext';
 
 interface DashboardProps { theme: 'dark' | 'light'; onNavigate?: (page: string, filter?: string) => void; }
 
@@ -13,7 +15,8 @@ const CustomTooltip = ({ active, payload }: any) => {
 
 export default function Dashboard({ theme, onNavigate }: DashboardProps) {
   const isDark = theme === 'dark';
-  const { stats, statusData, verificationData, criticalInstruments, upcomingVerifications, repairInstruments, recentOperations, urgentInstruments } = useMemo(() => {
+  const notification = useNotification();
+  const { stats, statusData, verificationData, criticalInstruments, upcomingVerifications, repairInstruments, recentOperations, urgentInstruments, onVerification, overdueSendoffs } = useMemo(() => {
     const instruments = store.getInstruments();
     const operations = store.getOperations();
     const stats = store.getDashboardStats();
@@ -26,10 +29,12 @@ export default function Dashboard({ theme, onNavigate }: DashboardProps) {
     const recentOperations = operations.slice(0, 8);
     const dueSoonInstruments = instruments.filter(i => { if (!i.nextVerificationDate) return false; const nextDate = new Date(i.nextVerificationDate); const diffDays = Math.ceil((nextDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)); return diffDays >= 0 && diffDays <= 7 && i.status === 'issued'; });
     const urgentInstruments = [...expiredInstruments.map(i => ({ ...i, priority: 1, daysUntil: Math.ceil((new Date(i.nextVerificationDate!).getTime() - today.getTime()) / (1000 * 60 * 60 * 24)) })), ...dueSoonInstruments.map(i => ({ ...i, priority: 2, daysUntil: Math.ceil((new Date(i.nextVerificationDate!).getTime() - today.getTime()) / (1000 * 60 * 60 * 24)) }))].sort((a, b) => a.daysUntil - b.daysUntil).slice(0, 7);
+    const onVerification = instruments.filter(i => i.status === 'verification');
+    const overdueSendoffs = getOverdueSendoffs();
     const statusData = [
       { name: 'Доступно', value: stats.available, color: '#6ee7b7', filter: 'available' },
       { name: 'Выдано', value: stats.issued, color: '#67e8f9', filter: 'issued' },
-      { name: 'На поверке', value: instruments.filter(i => i.status === 'verification').length, color: '#a78bfa', filter: 'verification' },
+      { name: 'На поверке', value: onVerification.length, color: '#a78bfa', filter: 'verification' },
       { name: 'Ремонт', value: instruments.filter(i => i.status === 'repair').length, color: '#fcd34d', filter: 'repair' },
       { name: 'Списано', value: instruments.filter(i => i.status === 'decommissioned').length, color: '#94a3b8', filter: 'decommissioned' },
     ].filter(d => d.value > 0);
@@ -38,8 +43,18 @@ export default function Dashboard({ theme, onNavigate }: DashboardProps) {
       { name: 'Скоро (30 дн.)', value: stats.verificationDueSoon, color: '#fcd34d', filter: 'due_soon' },
       { name: 'В норме', value: stats.totalInstruments - stats.expiredVerification - stats.verificationDueSoon, color: '#6ee7b7', filter: undefined },
     ].filter(d => d.value > 0);
-    return { stats, statusData, verificationData, criticalInstruments: { expired: expiredInstruments.length, dueSoon: dueSoonInstruments.length }, upcomingVerifications: upcomingThisMonth, repairInstruments, recentOperations, urgentInstruments };
+    return { stats, statusData, verificationData, criticalInstruments: { expired: expiredInstruments.length, dueSoon: dueSoonInstruments.length }, upcomingVerifications: upcomingThisMonth, repairInstruments, recentOperations, urgentInstruments, onVerification, overdueSendoffs };
   }, []);
+
+  // Одноразовое уведомление о просроченных возвратах
+  useEffect(() => {
+    if (overdueSendoffs.length > 0) {
+      notification.warning(
+        'Просрочен возврат с поверки',
+        `${overdueSendoffs.length} прибор(ов) не возвращены в срок`
+      );
+    }
+  }, [overdueSendoffs.length]);
 
   const handleChartClick = useCallback((data: any) => { if (onNavigate && data && data.filter) onNavigate('instruments', data.filter); }, [onNavigate]);
   const monthNames = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
@@ -66,6 +81,14 @@ export default function Dashboard({ theme, onNavigate }: DashboardProps) {
           <div className="flex items-center gap-2 mb-3"><Wrench size={20} className="text-amber-400" /><h3 className="font-semibold text-amber-300">Ремонт</h3></div>
           <div className="space-y-2 mb-3 flex-1"><div className="flex items-center justify-between"><span className="text-sm text-slate-300">В ремонте:</span><span className="text-lg font-bold text-amber-400">{repairInstruments.length} шт.</span></div></div>
           <button onClick={() => onNavigate?.('instruments', 'repair')} className="w-full py-2 bg-amber-400 text-white rounded-lg text-sm font-medium hover:bg-amber-500">Показать детали →</button>
+        </div>
+        <div className={`rounded-xl p-4 border-2 flex flex-col ${isDark ? 'bg-purple-400/5 border-purple-400/20' : 'bg-purple-50 border-purple-200'}`}>
+          <div className="flex items-center gap-2 mb-3"><Clock size={20} className="text-purple-400" /><h3 className="font-semibold text-purple-300">На поверке</h3></div>
+          <div className="space-y-2 mb-3 flex-1">
+            <div className="flex items-center justify-between"><span className="text-sm text-slate-300">Отправлено:</span><span className="text-lg font-bold text-purple-400">{onVerification.length} шт.</span></div>
+            {overdueSendoffs.length > 0 && <div className="flex items-center justify-between"><span className="text-sm text-slate-300">Просрочен возврат:</span><span className="text-lg font-bold text-red-400">{overdueSendoffs.length} шт.</span></div>}
+          </div>
+          <button onClick={() => onNavigate?.('instruments', 'verification')} className="w-full py-2 bg-purple-400 text-white rounded-lg text-sm font-medium hover:bg-purple-500">Показать детали →</button>
         </div>
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5">

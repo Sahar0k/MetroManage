@@ -9,7 +9,7 @@ import InstrumentDetailModal from './InstrumentDetailModal';
 import InstrumentCard from './InstrumentCard';
 import ConfirmDialog from './ConfirmDialog';
 
-interface LayoutProps { children: React.ReactNode; currentPage: string; onNavigate: (page: string, filter?: string, instrumentId?: string) => void; onUserChange?: () => void; onDataSourceClick?: () => void; }
+interface LayoutProps { children: React.ReactNode; currentPage: string; onNavigate: (page: string, filter?: string, instrumentId?: string, comment?: string, sendoffId?: string) => void; onUserChange?: () => void; onDataSourceClick?: () => void; }
 
 const ALL_NAV_ITEMS = [
   { id: 'dashboard', label: 'Сводка', icon: LayoutDashboard, roles: ['metrologist'] },
