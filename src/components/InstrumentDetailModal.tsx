@@ -85,9 +85,9 @@ export default function InstrumentDetailModal({ instrument, onClose, onEdit, onD
 
   return (
     <div onClick={onClose} className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
-      <div onClick={(e) => e.stopPropagation()} className="bg-slate-900 rounded-2xl max-w-6xl w-full my-8 shadow-2xl border border-slate-800 overflow-hidden">
+      <button onClick={onClose} className="fixed top-8 right-8 w-12 h-12 flex items-center justify-center rounded-full bg-red-500 hover:bg-red-600 transition-all hover:scale-110 z-[150] shadow-xl shadow-red-500/50 border-2 border-white"><X size={24} strokeWidth={3} className="text-white" /></button>
+      <div onClick={(e) => e.stopPropagation()} className="relative bg-slate-900 rounded-2xl max-w-6xl w-full my-8 shadow-2xl border border-slate-800 overflow-hidden">
         <div className="relative bg-gradient-to-br from-slate-900 via-slate-900 to-slate-800 border-b border-slate-800 px-8 py-6">
-          <button onClick={onClose} className="absolute top-4 right-4 p-2 rounded-lg bg-slate-800 hover:bg-red-600 transition-colors z-10"><X size={24} className="text-white" /></button>
           <div className="flex items-start gap-5 min-w-0 pr-12">
             <Logo />
             <div className="min-w-0 pt-0.5">
