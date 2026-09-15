@@ -3,7 +3,7 @@ import { store, scannerStatus } from '../store';
 import { User, MeasuringInstrument } from '../types';
 import { getRoleLabel } from '../utils/domain';
 import { unlockAudio } from '../utils/audio';
-import { LayoutDashboard, Wrench, ArrowLeftRight, Users, ScrollText, Radio, LogIn, LogOut, Menu, X, Calendar, Search, ClipboardCheck } from 'lucide-react';
+import { LayoutDashboard, Wrench, ArrowLeftRight, Users, ScrollText, Radio, LogIn, LogOut, Menu, X, Calendar, Search, ClipboardCheck, Upload } from 'lucide-react';
 import SearchContextMenu from './SearchContextMenu';
 import InstrumentDetailModal from './InstrumentDetailModal';
 import InstrumentCard from './InstrumentCard';
@@ -20,6 +20,7 @@ const ALL_NAV_ITEMS = [
   { id: 'personnel', label: 'Персонал', icon: Users, roles: ['metrologist'] },
   { id: 'operations', label: 'Журнал', icon: ScrollText, roles: ['metrologist'] },
   { id: 'scanner', label: 'Терминал', icon: Radio, roles: ['metrologist'] },
+  { id: 'import', label: 'Импорт реестра', icon: Upload, roles: ['metrologist'] },
 ];
 
 export default function Layout({ children, currentPage, onNavigate, onUserChange, onDataSourceClick }: LayoutProps) {
