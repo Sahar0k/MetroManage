@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import { User, Department, Employee, MeasuringInstrument, Warehouse, IssueRecord, OperationLog, DashboardStats, InstrumentCategory } from './types';
+import { User, Department, Employee, MeasuringInstrument, Warehouse, IssueRecord, OperationLog, DashboardStats, InstrumentCategory, VerificationProtocol } from './types';
 import { calculateNextVerification, isVerificationExpired, isVerificationDueSoon } from './utils/domain';
 import { CATEGORY_TEMPLATES } from './utils/customFields';
 
@@ -34,7 +34,7 @@ const STORAGE_KEYS = {
   categories: 'mk_categories',
 };
 
-const CURRENT_DATA_VERSION = '6.1';
+const CURRENT_DATA_VERSION = '6.2';
 
 function getSeedWarehouses(): Warehouse[] {
   return [
@@ -307,4 +307,9 @@ export const store = {
   updateCategory: (id: string, updates: Partial<Omit<InstrumentCategory, 'id' | 'createdAt'>>) => { const categories = store.getCategories().map(c => c.id === id ? { ...c, ...updates } : c); localStorage.setItem(STORAGE_KEYS.categories, JSON.stringify(categories)); },
   deleteCategory: (id: string): { success: boolean; message: string } => { const category = store.getCategories().find(c => c.id === id); if (!category) return { success: false, message: 'Категория не найдена' }; const instruments = store.getInstruments(); const hasInstruments = instruments.some(i => i.category === category.name); if (hasInstruments) return { success: false, message: `Нельзя удалить категорию: в ней есть приборы (${instruments.filter(i => i.category === category.name).length} шт.)` }; const categories = store.getCategories().filter(c => c.id !== id); localStorage.setItem(STORAGE_KEYS.categories, JSON.stringify(categories)); return { success: true, message: 'Категория удалена' }; },
   getDashboardStats: (): DashboardStats => { const instruments = store.getInstruments(); return { totalInstruments: instruments.length, available: instruments.filter(i => i.status === 'available').length, issued: instruments.filter(i => i.status === 'issued').length, expiredVerification: instruments.filter(i => isVerificationExpired(i)).length, verificationDueSoon: instruments.filter(i => isVerificationDueSoon(i)).length, totalEmployees: store.getEmployees().length, totalDepartments: store.getDepartments().length }; },
+  // === Рабочее место поверителя ===
+  getProtocols: (): VerificationProtocol[] => { const data = localStorage.getItem('mk_verification_protocols'); return data ? JSON.parse(data) : []; },
+  addProtocol: (protocol: Omit<VerificationProtocol, 'id' | 'createdAt' | 'updatedAt'>): VerificationProtocol => { const protocols = store.getProtocols(); const newProtocol = { ...protocol, id: uuidv4(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }; protocols.push(newProtocol); localStorage.setItem('mk_verification_protocols', JSON.stringify(protocols)); return newProtocol; },
+  updateProtocol: (id: string, updates: Partial<VerificationProtocol>): VerificationProtocol | null => { const protocols = store.getProtocols(); const protocol = protocols.find(p => p.id === id); if (!protocol) return null; if (protocol.status === 'completed' || protocol.status === 'rejected') { throw new Error('Нельзя изменять завершённый или отклонённый протокол'); } const updated = { ...protocol, ...updates, updatedAt: new Date().toISOString() }; const newProtocols = protocols.map(p => p.id === id ? updated : p); localStorage.setItem('mk_verification_protocols', JSON.stringify(newProtocols)); return updated; },
+  deleteProtocol: (id: string): boolean => { const protocols = store.getProtocols(); const protocol = protocols.find(p => p.id === id); if (!protocol) return false; if (protocol.status === 'completed' || protocol.status === 'rejected') { throw new Error('Нельзя удалить завершённый или отклонённый протокол'); } const newProtocols = protocols.filter(p => p.id !== id); localStorage.setItem('mk_verification_protocols', JSON.stringify(newProtocols)); return true; },
 };

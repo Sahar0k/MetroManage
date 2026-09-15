@@ -3,7 +3,7 @@ import { store, scannerStatus } from '../store';
 import { User, MeasuringInstrument } from '../types';
 import { getRoleLabel } from '../utils/domain';
 import { unlockAudio } from '../utils/audio';
-import { LayoutDashboard, Wrench, ArrowLeftRight, Users, ScrollText, Radio, LogIn, LogOut, Menu, X, Calendar, Search } from 'lucide-react';
+import { LayoutDashboard, Wrench, ArrowLeftRight, Users, ScrollText, Radio, LogIn, LogOut, Menu, X, Calendar, Search, ClipboardCheck } from 'lucide-react';
 import SearchContextMenu from './SearchContextMenu';
 import InstrumentDetailModal from './InstrumentDetailModal';
 import InstrumentCard from './InstrumentCard';
@@ -15,6 +15,7 @@ const ALL_NAV_ITEMS = [
   { id: 'dashboard', label: 'Сводка', icon: LayoutDashboard, roles: ['metrologist'] },
   { id: 'instruments', label: 'Реестр СИ', icon: Wrench, roles: ['guest', 'metrologist'] },
   { id: 'verification', label: 'Поверки', icon: Calendar, roles: ['metrologist'] },
+  { id: 'verification-workspace', label: 'Рабочее место поверителя', icon: ClipboardCheck, roles: ['metrologist'] },
   { id: 'issue-return', label: 'Выдача / Возврат', icon: ArrowLeftRight, roles: ['metrologist'] },
   { id: 'personnel', label: 'Персонал', icon: Users, roles: ['metrologist'] },
   { id: 'operations', label: 'Журнал', icon: ScrollText, roles: ['metrologist'] },

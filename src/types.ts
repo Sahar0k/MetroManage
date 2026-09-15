@@ -131,3 +131,37 @@ export interface DashboardStats {
   totalEmployees: number;
   totalDepartments: number;
 }
+
+// === Рабочее место поверителя ===
+
+export interface VerificationPoint {
+  id: string;
+  name: string;                    // Название точки (например, "100 В DC")
+  nominal: number;                 // Номинальное значение
+  unit: string;                    // Единица измерения (В, А, Ом и т.д.)
+  actual?: number;                 // Фактическое значение (вводится поверителем)
+  error?: number;                  // Погрешность (рассчитывается автоматически)
+  tolerance: number;               // Допуск (максимальная погрешность)
+  verdict?: 'pass' | 'fail';       // Вердикт (рассчитывается автоматически)
+}
+
+export interface VerificationProtocol {
+  id: string;
+  deviceId: string;                // ID средства измерений
+  instrumentInventoryNumber: string; // Снапшот инвентарного номера
+  instrumentName: string;          // Снапшот наименования
+  operatorId: string;              // ID поверителя (сотрудника)
+  dateStart: string;               // Дата начала поверки (ISO)
+  dateEnd?: string;                // Дата завершения поверки (ISO)
+  status: 'draft' | 'in_progress' | 'completed' | 'rejected';
+  result?: 'pass' | 'fail';        // Итоговый вердикт
+  points: VerificationPoint[];     // Точки измерений
+  conditions?: {                   // Влияющие величины (опционально)
+    temperature?: number;
+    humidity?: number;
+  };
+  notes?: string;                  // Примечания
+  rejectionReason?: string;        // Причина отклонения
+  createdAt: string;               // Дата создания протокола
+  updatedAt: string;               // Дата последнего обновления
+}
