@@ -85,8 +85,8 @@ export default function Layout({ children, currentPage, onNavigate, onUserChange
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100">
-      <div className="hidden lg:block fixed top-0 left-64 right-0 z-50 bg-slate-800 border-b border-slate-700">
-        <div className="px-6 py-5 flex items-center justify-center">
+      <div className="hidden lg:block fixed top-0 left-64 right-0 z-50 bg-slate-800 border-b border-slate-700 h-[72px]">
+        <div className="px-6 h-full flex items-center justify-center">
           <div className="relative w-full max-w-3xl">
             <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
             <input id="global-search" type="text" value={globalSearch} onChange={(e) => setGlobalSearch(e.target.value)} placeholder="🔍 Поиск СИ (инвентарный номер, заводской номер, модель)" className="w-full pl-12 pr-20 py-3 rounded-lg bg-slate-700 border border-slate-600 text-white text-sm placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent" />
@@ -109,7 +109,7 @@ export default function Layout({ children, currentPage, onNavigate, onUserChange
         </div>
       </div>
 
-      <div className="lg:hidden fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-4 py-4 bg-slate-800 border-slate-700 border-b">
+      <div className="lg:hidden fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-4 h-[72px] bg-slate-800 border-slate-700 border-b">
         <button onClick={() => setSidebarOpen(!sidebarOpen)} className="p-2 rounded-lg hover:bg-slate-700/30">{sidebarOpen ? <X size={20} /> : <Menu size={20} />}</button>
         <span className="font-bold text-cyan-500 text-sm">Учёт СИ</span>
       </div>
@@ -118,7 +118,7 @@ export default function Layout({ children, currentPage, onNavigate, onUserChange
 
       <aside className={`fixed top-0 left-0 z-40 h-full w-64 transform transition-transform duration-200 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 bg-slate-800 border-slate-700 border-r`}>
         <div className="flex flex-col h-full">
-          <div className="p-4 border-b border-white/[0.08] cursor-pointer select-none" onDoubleClick={onDataSourceClick}>
+          <div className="h-[72px] px-4 flex items-center border-b border-white/[0.08] cursor-pointer select-none" onDoubleClick={onDataSourceClick}>
             <div className="flex items-center gap-3 group">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center flex-shrink-0 shadow-lg"><Wrench size={20} className="text-white" /></div>
               <div><h1 className="text-[15px] font-semibold text-white leading-tight">Учёт средств измерений</h1><p className="text-[11px] text-[#8A99AD] leading-tight mt-0.5">Метрологический учет</p></div>
@@ -152,8 +152,8 @@ export default function Layout({ children, currentPage, onNavigate, onUserChange
         </div>
       </aside>
 
-      <main className="lg:ml-64 pt-[72px] lg:pt-[72px] min-h-screen">
-        <div className="p-4 pt-2 lg:p-6 lg:pt-3 max-w-7xl mx-auto">{children}</div>
+      <main className="lg:ml-64 pt-[72px] min-h-screen">
+        <div className="p-4 pt-6 lg:p-6 lg:pt-8 max-w-7xl mx-auto">{children}</div>
       </main>
 
       {selectedInstrument && menuPosition && <SearchContextMenu instrument={selectedInstrument} position={menuPosition} onClose={handleCloseMenu} onViewCard={handleViewCard} onIssue={handleIssue} onReturn={handleReturn} onEdit={handleEdit} onDelete={handleDelete} />}
