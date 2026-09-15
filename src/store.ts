@@ -95,11 +95,12 @@ function getSeedInstruments(warehouses: Warehouse[]): MeasuringInstrument[] {
     const intervalMonths = Math.random() > 0.5 ? 12 : 24;
     const nextVerificationDate = calculateNextVerification(lastVerificationDate.toISOString().split('T')[0], intervalMonths);
     
-    let status: 'available' | 'issued' | 'repair' | 'decommissioned' = 'available';
+    let status: 'available' | 'issued' | 'repair' | 'decommissioned' | 'verification' = 'available';
     const statusRandom = Math.random();
-    if (statusRandom > 0.9) status = 'issued';
-    else if (statusRandom > 0.85) status = 'repair';
-    else if (statusRandom > 0.82) status = 'decommissioned';
+    if (statusRandom > 0.92) status = 'issued';
+    else if (statusRandom > 0.88) status = 'repair';
+    else if (statusRandom > 0.85) status = 'decommissioned';
+    else if (statusRandom > 0.80) status = 'verification';
     
     const warehouseIndex = i % warehouses.length;
     
@@ -131,7 +132,7 @@ function getSeedInstruments(warehouses: Warehouse[]): MeasuringInstrument[] {
       lastVerificationDate: lastVerificationDate.toISOString().split('T')[0],
       intervalMonths,
       nextVerificationDate,
-      location: status === 'issued' ? 'Выдан' : status === 'repair' ? 'Ремонтная мастерская' : status === 'decommissioned' ? 'Архив' : 'Кладовая СИ',
+      location: status === 'issued' ? 'Выдан' : status === 'repair' ? 'Ремонтная мастерская' : status === 'decommissioned' ? 'Архив' : status === 'verification' ? 'Метрологическая служба' : 'Кладовая СИ',
       warehouseId: status === 'available' ? warehouses[warehouseIndex].id : null,
       customFields: customFields || {},
     });

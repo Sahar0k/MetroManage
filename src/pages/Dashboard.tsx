@@ -29,6 +29,7 @@ export default function Dashboard({ theme, onNavigate }: DashboardProps) {
     const statusData = [
       { name: 'Доступно', value: stats.available, color: '#6ee7b7', filter: 'available' },
       { name: 'Выдано', value: stats.issued, color: '#67e8f9', filter: 'issued' },
+      { name: 'На поверке', value: instruments.filter(i => i.status === 'verification').length, color: '#a78bfa', filter: 'verification' },
       { name: 'Ремонт', value: instruments.filter(i => i.status === 'repair').length, color: '#fcd34d', filter: 'repair' },
       { name: 'Списано', value: instruments.filter(i => i.status === 'decommissioned').length, color: '#94a3b8', filter: 'decommissioned' },
     ].filter(d => d.value > 0);

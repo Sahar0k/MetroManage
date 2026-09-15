@@ -50,6 +50,9 @@ export function canIssueInstrument(instrument: MeasuringInstrument, userRole: Ro
   if (instrument.status === 'repair') {
     return { success: false, reason: 'in_repair', message: 'СИ находится в ремонте' };
   }
+  if (instrument.status === 'verification') {
+    return { success: false, reason: 'in_verification', message: 'СИ находится на поверке' };
+  }
   if (instrument.status === 'issued') {
     return { success: false, reason: 'already_issued', message: 'СИ уже выдано другому сотруднику' };
   }

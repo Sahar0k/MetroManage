@@ -4,7 +4,7 @@ import { MeasuringInstrument, Role } from '../types';
 import { formatDate, hasPermission, isVerificationExpired, isVerificationDueSoon } from '../utils/domain';
 import { playSuccess, playError } from '../utils/audio';
 import { useNotification } from '../contexts/NotificationContext';
-import { Search, Plus, CheckCircle, X, Package, Filter, Settings } from 'lucide-react';
+import { Search, Plus, CheckCircle, X, Package, Filter, Settings, Clock } from 'lucide-react';
 import InstrumentCard from '../components/InstrumentCard';
 import InstrumentDetailModal from '../components/InstrumentDetailModal';
 import FilterBuilder from '../components/FilterBuilder';
@@ -43,6 +43,7 @@ export default function Instruments({ theme, userId, userRole, initialFilter, on
       if (activeFilter === 'issued') return i.status === 'issued';
       if (activeFilter === 'repair') return i.status === 'repair';
       if (activeFilter === 'decommissioned') return i.status === 'decommissioned';
+      if (activeFilter === 'verification') return i.status === 'verification';
       if (activeFilter === 'expired') return isVerificationExpired(i);
       if (activeFilter === 'due_soon') return isVerificationDueSoon(i);
       return true;
@@ -98,6 +99,7 @@ export default function Instruments({ theme, userId, userRole, initialFilter, on
   const getStatusBadge = (item: MeasuringInstrument) => {
     if (item.status === 'decommissioned') return <span className="px-2 py-0.5 rounded-full text-xs bg-slate-500/20 text-slate-400">Списано</span>;
     if (item.status === 'repair') return <span className="px-2 py-0.5 rounded-full text-xs bg-amber-500/20 text-amber-400">Ремонт</span>;
+    if (item.status === 'verification') return <span className="px-2 py-0.5 rounded-full text-xs bg-purple-500/20 text-purple-400 flex items-center gap-1"><Clock size={10} /> На поверке</span>;
     if (item.status === 'issued') return <span className="px-2 py-0.5 rounded-full text-xs bg-cyan-500/20 text-cyan-400">Выдано</span>;
     return <span className="px-2 py-0.5 rounded-full text-xs bg-emerald-500/20 text-emerald-400 flex items-center gap-1"><CheckCircle size={10} /> Доступно</span>;
   };
@@ -117,7 +119,7 @@ export default function Instruments({ theme, userId, userRole, initialFilter, on
       </div>
 
       <div className="flex flex-wrap gap-2">
-        {[{ id: 'all', label: 'Все', count: instruments.length }, { id: 'available', label: 'Доступные', count: instruments.filter(i => i.status === 'available').length }, { id: 'issued', label: 'Выданные', count: instruments.filter(i => i.status === 'issued').length }, { id: 'repair', label: 'Ремонт', count: instruments.filter(i => i.status === 'repair').length }, { id: 'expired', label: 'Просрочено', count: instruments.filter(i => isVerificationExpired(i)).length }, { id: 'due_soon', label: 'Скоро поверка', count: instruments.filter(i => isVerificationDueSoon(i)).length }].map(filter => (
+        {[{ id: 'all', label: 'Все', count: instruments.length }, { id: 'available', label: 'Доступные', count: instruments.filter(i => i.status === 'available').length }, { id: 'issued', label: 'Выданные', count: instruments.filter(i => i.status === 'issued').length }, { id: 'verification', label: 'На поверке', count: instruments.filter(i => i.status === 'verification').length }, { id: 'repair', label: 'Ремонт', count: instruments.filter(i => i.status === 'repair').length }, { id: 'expired', label: 'Просрочено', count: instruments.filter(i => isVerificationExpired(i)).length }, { id: 'due_soon', label: 'Скоро поверка', count: instruments.filter(i => isVerificationDueSoon(i)).length }].map(filter => (
           <button key={filter.id} onClick={() => setActiveFilter(filter.id === 'all' ? undefined : filter.id)} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${(activeFilter || 'all') === filter.id ? 'bg-cyan-500 text-white' : isDark ? 'bg-slate-800 text-slate-300 hover:bg-slate-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>{filter.label} ({filter.count})</button>
         ))}
         <button onClick={() => setShowFilterBuilder(true)} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${customFilteredInstruments ? 'bg-purple-500 text-white' : isDark ? 'bg-slate-800 text-slate-300 hover:bg-slate-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}><Filter size={16} />Фильтры</button>
@@ -163,7 +165,7 @@ export default function Instruments({ theme, userId, userRole, initialFilter, on
               <div><label className="text-xs text-slate-400 mb-1 block">Производитель</label><input value={formData.manufacturer} onChange={e => setFormData({...formData, manufacturer: e.target.value})} className={inputClass} /></div>
               <div><label className="text-xs text-slate-400 mb-1 block">Диапазон</label><input value={formData.range} onChange={e => setFormData({...formData, range: e.target.value})} className={inputClass} /></div>
               <div><label className="text-xs text-slate-400 mb-1 block">Точность</label><input value={formData.accuracy} onChange={e => setFormData({...formData, accuracy: e.target.value})} className={inputClass} /></div>
-              <div><label className="text-xs text-slate-400 mb-1 block">Статус</label><select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value as any})} className={inputClass}><option value="available">Доступно</option><option value="issued">Выдано</option><option value="repair">Ремонт</option><option value="decommissioned">Списано</option></select></div>
+              <div><label className="text-xs text-slate-400 mb-1 block">Статус</label><select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value as any})} className={inputClass}><option value="available">Доступно</option><option value="issued">Выдано</option><option value="verification">На поверке</option><option value="repair">Ремонт</option><option value="decommissioned">Списано</option></select></div>
               <div><label className="text-xs text-slate-400 mb-1 block">Дата поверки</label><input type="date" value={formData.lastVerificationDate} onChange={e => setFormData({...formData, lastVerificationDate: e.target.value})} className={inputClass} /></div>
               <div><label className="text-xs text-slate-400 mb-1 block">Интервал (мес.)</label><input type="number" min={1} max={120} value={formData.intervalMonths} onChange={e => setFormData({...formData, intervalMonths: parseInt(e.target.value) || 12})} className={inputClass} /></div>
               <div><label className="text-xs text-slate-400 mb-1 block">Склад</label><select value={formData.warehouseId || ''} onChange={e => setFormData({...formData, warehouseId: e.target.value || null})} className={inputClass}><option value="">— Не указан —</option>{warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}</select></div>

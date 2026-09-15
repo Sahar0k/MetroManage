@@ -96,8 +96,8 @@ export default function Layout({ children, currentPage, onNavigate, onUserChange
                   <button key={instrument.id} onClick={() => handleSearchResultClick(instrument)} className="w-full text-left px-4 py-3 hover:bg-slate-700 border-b border-slate-700 last:border-b-0">
                     <div className="flex items-center justify-between">
                       <div><p className="font-mono text-xs text-cyan-400">{instrument.inventoryNumber}</p><p className="text-sm font-medium text-slate-200">{instrument.name}</p><p className="text-xs text-slate-400">{instrument.category} - {instrument.type}</p></div>
-                      <span className={`text-xs px-2 py-1 rounded ${instrument.status === 'available' ? 'bg-emerald-400/15 text-emerald-300' : instrument.status === 'issued' ? 'bg-cyan-400/15 text-cyan-300' : instrument.status === 'repair' ? 'bg-amber-400/15 text-amber-300' : 'bg-slate-500/15 text-slate-400'}`}>
-                        {instrument.status === 'available' ? 'Доступно' : instrument.status === 'issued' ? 'Выдано' : instrument.status === 'repair' ? 'Ремонт' : 'Списано'}
+                      <span className={`text-xs px-2 py-1 rounded ${instrument.status === 'available' ? 'bg-emerald-400/15 text-emerald-300' : instrument.status === 'issued' ? 'bg-cyan-400/15 text-cyan-300' : instrument.status === 'verification' ? 'bg-purple-400/15 text-purple-300' : instrument.status === 'repair' ? 'bg-amber-400/15 text-amber-300' : 'bg-slate-500/15 text-slate-400'}`}>
+                        {instrument.status === 'available' ? 'Доступно' : instrument.status === 'issued' ? 'Выдано' : instrument.status === 'verification' ? 'На поверке' : instrument.status === 'repair' ? 'Ремонт' : 'Списано'}
                       </span>
                     </div>
                   </button>

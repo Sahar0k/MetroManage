@@ -74,7 +74,7 @@ export interface MeasuringInstrument {
   manufacturer: string;
   range: string;
   accuracy: string;
-  status: 'available' | 'issued' | 'repair' | 'decommissioned';
+  status: 'available' | 'issued' | 'repair' | 'decommissioned' | 'verification';
   lastVerificationDate: string | null;
   intervalMonths: number;
   nextVerificationDate: string | null;
@@ -114,7 +114,7 @@ export interface ScannerEvent {
   online: boolean;
 }
 
-export type BlockReason = 'expired_verification' | 'already_issued' | 'insufficient_role' | 'decommissioned' | 'in_repair' | null;
+export type BlockReason = 'expired_verification' | 'already_issued' | 'insufficient_role' | 'decommissioned' | 'in_repair' | 'in_verification' | null;
 
 export interface IssueResult {
   success: boolean;

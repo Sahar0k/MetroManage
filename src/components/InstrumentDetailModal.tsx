@@ -58,6 +58,7 @@ export default function InstrumentDetailModal({ instrument, onClose, onEdit, onD
     switch (status) {
       case 'available': return { label: 'В наличии', color: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30', dot: 'bg-emerald-400', icon: CheckCircle2 };
       case 'issued': return { label: 'Выдано', color: 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30', dot: 'bg-cyan-400', icon: ArrowRightLeft };
+      case 'verification': return { label: 'На поверке', color: 'bg-purple-500/15 text-purple-300 border-purple-500/30', dot: 'bg-purple-400', icon: Clock };
       case 'repair': return { label: 'На обслуживании', color: 'bg-amber-500/15 text-amber-300 border-amber-500/30', dot: 'bg-amber-400', icon: AlertCircle };
       case 'decommissioned': return { label: 'Списано', color: 'bg-slate-500/15 text-slate-300 border-slate-500/30', dot: 'bg-slate-400', icon: X };
       default: return { label: status, color: 'bg-slate-500/15 text-slate-300 border-slate-500/30', dot: 'bg-slate-400', icon: Info };
