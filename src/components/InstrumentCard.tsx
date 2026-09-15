@@ -3,6 +3,7 @@ import { MeasuringInstrument } from '../types';
 import { formatDate } from '../utils/domain';
 import bwipjs from 'bwip-js';
 import { X, Printer } from 'lucide-react';
+import { COMPANY_NAME } from '../config';
 
 interface InstrumentCardProps { instrument: MeasuringInstrument; onClose: () => void; }
 
@@ -30,7 +31,7 @@ const InstrumentCard = memo(function InstrumentCard({ instrument, onClose }: Ins
     if (!cardRef.current) return;
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
-    printWindow.document.write(`<!DOCTYPE html><html><head><title>Карточка ${instrument.inventoryNumber}</title><style>body{font-family:Arial;display:flex;justify-content:center;align-items:center;min-height:100vh;padding:20px;}.card{border:2px solid black;padding:16px;width:400px;}.header{text-align:center;font-weight:bold;border-bottom:2px solid black;padding-bottom:8px;margin-bottom:12px;}.row{display:flex;justify-content:space-between;margin:4px 0;}.label{font-weight:600;}</style></head><body><div class="card"><div class="header">АО НИИ СТТ</div><div class="row"><span class="label">Наименование:</span><span>${instrument.name}</span></div><div class="row"><span class="label">Модель:</span><span>${instrument.type}</span></div><div class="row"><span class="label">Серийный №:</span><span>${instrument.serialNumber}</span></div><div class="row"><span class="label">Дата поверки:</span><span>${formatDate(instrument.lastVerificationDate)}</span></div><div class="row"><span class="label">Следующая поверка:</span><span><b>${formatDate(instrument.nextVerificationDate)}</b></span></div></div><script>setTimeout(()=>{window.print();window.close();},100);</script></body></html>`);
+    printWindow.document.write(`<!DOCTYPE html><html><head><title>Карточка ${instrument.inventoryNumber}</title><style>body{font-family:Arial;display:flex;justify-content:center;align-items:center;min-height:100vh;padding:20px;}.card{border:2px solid black;padding:16px;width:400px;}.header{text-align:center;font-weight:bold;border-bottom:2px solid black;padding-bottom:8px;margin-bottom:12px;}.row{display:flex;justify-content:space-between;margin:4px 0;}.label{font-weight:600;}</style></head><body><div class="card"><div class="header">${COMPANY_NAME}</div><div class="row"><span class="label">Наименование:</span><span>${instrument.name}</span></div><div class="row"><span class="label">Модель:</span><span>${instrument.type}</span></div><div class="row"><span class="label">Серийный №:</span><span>${instrument.serialNumber}</span></div><div class="row"><span class="label">Дата поверки:</span><span>${formatDate(instrument.lastVerificationDate)}</span></div><div class="row"><span class="label">Следующая поверка:</span><span><b>${formatDate(instrument.nextVerificationDate)}</b></span></div></div><script>setTimeout(()=>{window.print();window.close();},100);</script></body></html>`);
     printWindow.document.close();
   };
 
@@ -62,7 +63,7 @@ const InstrumentCard = memo(function InstrumentCard({ instrument, onClose }: Ins
         </div>
         <div className="flex justify-center mb-6">
           <div ref={cardRef} className={`bg-white text-black border-2 border-black ${sizeClasses[cardSize]}`}>
-            <div className="border-b-2 border-black pb-2 mb-3"><h3 className="font-bold text-center text-base">АО НИИ СТТ</h3></div>
+            <div className="border-b-2 border-black pb-2 mb-3"><h3 className="font-bold text-center text-base">{COMPANY_NAME}</h3></div>
             <div className="space-y-1 mb-3">
               <div className="flex justify-between"><span className="font-semibold">Наименование:</span><span className="text-right">{instrument.name}</span></div>
               <div className="flex justify-between"><span className="font-semibold">Модель:</span><span className="text-right">{instrument.type}</span></div>
