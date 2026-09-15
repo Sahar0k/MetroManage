@@ -152,8 +152,8 @@ export default function Layout({ children, currentPage, onNavigate, onUserChange
         </div>
       </aside>
 
-      <main className="lg:ml-64 pt-16 lg:pt-16 min-h-screen">
-        <div className="p-4 lg:p-6 max-w-7xl mx-auto">{children}</div>
+      <main className="lg:ml-64 pt-[72px] lg:pt-[72px] min-h-screen">
+        <div className="p-4 pt-2 lg:p-6 lg:pt-3 max-w-7xl mx-auto">{children}</div>
       </main>
 
       {selectedInstrument && menuPosition && <SearchContextMenu instrument={selectedInstrument} position={menuPosition} onClose={handleCloseMenu} onViewCard={handleViewCard} onIssue={handleIssue} onReturn={handleReturn} onEdit={handleEdit} onDelete={handleDelete} />}
