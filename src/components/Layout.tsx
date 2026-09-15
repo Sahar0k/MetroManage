@@ -15,7 +15,7 @@ const ALL_NAV_ITEMS = [
   { id: 'dashboard', label: 'Сводка', icon: LayoutDashboard, roles: ['metrologist'] },
   { id: 'instruments', label: 'Реестр СИ', icon: Wrench, roles: ['guest', 'metrologist'] },
   { id: 'verification', label: 'Поверки', icon: Calendar, roles: ['metrologist'] },
-  { id: 'verification-registry', label: 'Регистрация поверок', icon: ClipboardCheck, roles: ['metrologist'] },
+  // { id: 'verification-registry', label: 'Регистрация поверок', icon: ClipboardCheck, roles: ['metrologist'] },
   { id: 'issue-return', label: 'Выдача / Возврат', icon: ArrowLeftRight, roles: ['metrologist'] },
   { id: 'personnel', label: 'Персонал', icon: Users, roles: ['metrologist'] },
   { id: 'operations', label: 'Журнал', icon: ScrollText, roles: ['metrologist'] },
