@@ -34,7 +34,7 @@ const STORAGE_KEYS = {
   categories: 'mk_categories',
 };
 
-const CURRENT_DATA_VERSION = '6.0';
+const CURRENT_DATA_VERSION = '6.1';
 
 function getSeedWarehouses(): Warehouse[] {
   return [
@@ -137,6 +137,102 @@ function getSeedInstruments(warehouses: Warehouse[]): MeasuringInstrument[] {
       customFields: customFields || {},
     });
   }
+
+  // Добавляем тестовые приборы на поверке
+  const verificationInstruments: MeasuringInstrument[] = [
+    {
+      id: uuidv4(),
+      inventoryNumber: 'СИ-ВРФ-001',
+      name: 'Анализатор спектра Rohde & Schwarz FSV',
+      category: 'Анализатор спектра',
+      type: 'FSV',
+      serialNumber: 'FSV-2020-5001',
+      manufacturer: 'Rohde & Schwarz',
+      range: '10 МГц - 43 ГГц',
+      accuracy: '±0.5 дБ',
+      status: 'verification',
+      lastVerificationDate: new Date(today.getFullYear() - 1, today.getMonth(), 15).toISOString().split('T')[0],
+      intervalMonths: 12,
+      nextVerificationDate: calculateNextVerification(new Date(today.getFullYear() - 1, today.getMonth(), 15).toISOString().split('T')[0], 12),
+      location: 'Метрологическая служба',
+      warehouseId: null,
+      customFields: { freq_min: 10000, freq_max: 43000000000, dyn_range: 115, phase_noise: -105 }
+    },
+    {
+      id: uuidv4(),
+      inventoryNumber: 'СИ-ВРФ-002',
+      name: 'Осциллограф Rohde & Schwarz RTO1024',
+      category: 'Осциллограф',
+      type: 'RTO1024',
+      serialNumber: 'RTO-2019-3002',
+      manufacturer: 'Rohde & Schwarz',
+      range: '100 МГц - 2 ГГц',
+      accuracy: '±2%',
+      status: 'verification',
+      lastVerificationDate: new Date(today.getFullYear() - 1, today.getMonth() - 2, 10).toISOString().split('T')[0],
+      intervalMonths: 12,
+      nextVerificationDate: calculateNextVerification(new Date(today.getFullYear() - 1, today.getMonth() - 2, 10).toISOString().split('T')[0], 12),
+      location: 'Метрологическая служба',
+      warehouseId: null,
+      customFields: { bandwidth: 2000, channels: 4, sample_rate: 10, memory_depth: 100 }
+    },
+    {
+      id: uuidv4(),
+      inventoryNumber: 'СИ-ВРФ-003',
+      name: 'Мультиметр Keysight 34465A',
+      category: 'Мультиметр',
+      type: '34465A',
+      serialNumber: '34465A-2021-7003',
+      manufacturer: 'Keysight',
+      range: '0-1000 В',
+      accuracy: '±0.02%',
+      status: 'verification',
+      lastVerificationDate: new Date(today.getFullYear() - 1, today.getMonth() - 1, 20).toISOString().split('T')[0],
+      intervalMonths: 12,
+      nextVerificationDate: calculateNextVerification(new Date(today.getFullYear() - 1, today.getMonth() - 1, 20).toISOString().split('T')[0], 12),
+      location: 'Метрологическая служба',
+      warehouseId: null,
+      customFields: { voltage_dc_max: 1000, voltage_ac_max: 750, current_max: 3, digits: 6.5 }
+    },
+    {
+      id: uuidv4(),
+      inventoryNumber: 'СИ-ВРФ-004',
+      name: 'Генератор сигналов Rohde & Schwarz SMA100B',
+      category: 'Генератор сигналов',
+      type: 'SMA100B',
+      serialNumber: 'SMA-2020-4004',
+      manufacturer: 'Rohde & Schwarz',
+      range: '100 кГц - 43 ГГц',
+      accuracy: '±0.1 дБ',
+      status: 'verification',
+      lastVerificationDate: new Date(today.getFullYear() - 1, today.getMonth() - 3, 5).toISOString().split('T')[0],
+      intervalMonths: 12,
+      nextVerificationDate: calculateNextVerification(new Date(today.getFullYear() - 1, today.getMonth() - 3, 5).toISOString().split('T')[0], 12),
+      location: 'Метрологическая служба',
+      warehouseId: null,
+      customFields: { freq_min: 100000, freq_max: 43000000000, power_max: 27, modulation: 'AM' }
+    },
+    {
+      id: uuidv4(),
+      inventoryNumber: 'СИ-ВРФ-005',
+      name: 'Измеритель LCR Keysight E4980A',
+      category: 'Измеритель LCR',
+      type: 'E4980A',
+      serialNumber: 'E4980A-2019-6005',
+      manufacturer: 'Keysight',
+      range: '20 Гц - 2 МГц',
+      accuracy: '±0.05%',
+      status: 'verification',
+      lastVerificationDate: new Date(today.getFullYear() - 1, today.getMonth() - 4, 25).toISOString().split('T')[0],
+      intervalMonths: 12,
+      nextVerificationDate: calculateNextVerification(new Date(today.getFullYear() - 1, today.getMonth() - 4, 25).toISOString().split('T')[0], 12),
+      location: 'Метрологическая служба',
+      warehouseId: null,
+      customFields: { freq_test: 1, l_range: '100 мкГн - 100 Гн', c_range: '1 пФ - 1 Ф', r_range: '0.01 Ом - 100 МОм' }
+    }
+  ];
+
+  instruments.push(...verificationInstruments);
 
   return instruments;
 }
