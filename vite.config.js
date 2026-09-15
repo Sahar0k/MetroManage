@@ -11,5 +11,12 @@ export default defineConfig({
     hmr: {
       port: 3000,
     },
+    proxy: {
+      '/api/gosreestr': {
+        target: 'https://fgis.gost.ru',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/gosreestr/, '/fundmetrology'),
+      },
+    },
   },
 });

@@ -4,12 +4,14 @@ import { MeasuringInstrument, Role } from '../types';
 import { formatDate, hasPermission, isVerificationExpired, isVerificationDueSoon } from '../utils/domain';
 import { playSuccess, playError } from '../utils/audio';
 import { useNotification } from '../contexts/NotificationContext';
-import { Search, Plus, CheckCircle, X, Package, Filter, Settings, Clock } from 'lucide-react';
+import { Search, Plus, CheckCircle, X, Package, Filter, Settings, Clock, Database, Loader2, AlertCircle, Download } from 'lucide-react';
 import InstrumentCard from '../components/InstrumentCard';
 import InstrumentDetailModal from '../components/InstrumentDetailModal';
 import FilterBuilder from '../components/FilterBuilder';
 import CategoryBuilder from '../components/CategoryBuilder';
 import ConfirmDialog from '../components/ConfirmDialog';
+import { useGosreestrSearch } from '../hooks/useGosreestrSearch';
+import { fetchCard, mapToInstrument, downloadAttachment } from '../services/gosreestrService';
 
 interface InstrumentsProps { theme: 'dark' | 'light'; userId: string | null; userRole: Role; initialFilter?: string; onNavigate?: (page: string, filter?: string, instrumentId?: string) => void; }
 
@@ -30,6 +32,15 @@ export default function Instruments({ theme, userId, userRole, initialFilter, on
   const [formData, setFormData] = useState({ inventoryNumber: '', name: '', category: '', type: '', serialNumber: '', manufacturer: '', range: '', accuracy: '', status: 'available' as MeasuringInstrument['status'], lastVerificationDate: '', intervalMonths: 12, location: '', warehouseId: warehouses[0]?.id || null, photo: '', customFields: {} as Record<string, string | number> });
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const notification = useNotification();
+  
+  // Госреестр СИ
+  const [gosreestrQuery, setGosreestrQuery] = useState('');
+  const [showGosreestrHints, setShowGosreestrHints] = useState(false);
+  const [gosreestrStatus, setGosreestrStatus] = useState<'idle' | 'loading' | 'found' | 'not_found' | 'invalid'>('idle');
+  const [selectedGosreestrId, setSelectedGosreestrId] = useState<string | null>(null);
+  const [descriptionLink, setDescriptionLink] = useState<string | null>(null);
+  const [methodLink, setMethodLink] = useState<string | null>(null);
+  const { hints, loading: gosreestrLoading } = useGosreestrSearch(gosreestrQuery);
 
   useEffect(() => { setActiveFilter(initialFilter); }, [initialFilter]);
   const isDark = theme === 'dark';
@@ -57,7 +68,13 @@ export default function Instruments({ theme, userId, userRole, initialFilter, on
   const openAdd = useCallback(() => {
     setEditItem(null);
     setFormData({ inventoryNumber: `СИ-${String(instruments.length + 1).padStart(4, '0')}`, name: '', category: '', type: '', serialNumber: '', manufacturer: '', range: '', accuracy: '', status: 'available', lastVerificationDate: new Date().toISOString().split('T')[0], intervalMonths: 12, location: 'Кладовая СИ', warehouseId: warehouses[0]?.id || null, photo: '', customFields: {} });
-    setValidationErrors({}); setShowForm(true);
+    setValidationErrors({}); 
+    setGosreestrQuery('');
+    setGosreestrStatus('idle');
+    setSelectedGosreestrId(null);
+    setDescriptionLink(null);
+    setMethodLink(null);
+    setShowForm(true);
   }, [instruments.length, warehouses]);
 
   const openEdit = useCallback((item: MeasuringInstrument) => {
@@ -95,6 +112,60 @@ export default function Instruments({ theme, userId, userRole, initialFilter, on
     reader.onload = (event) => { setFormData(prev => ({ ...prev, photo: event.target?.result as string })); };
     reader.readAsDataURL(file);
   }, []);
+
+  // Обработчик выбора подсказки из Госреестра
+  const handleGosreestrSelect = useCallback(async (hintId: string) => {
+    setGosreestrStatus('loading');
+    setShowGosreestrHints(false);
+    setSelectedGosreestrId(hintId);
+    
+    const card = await fetchCard(hintId);
+    
+    if (card) {
+      if (card.status !== 'Действует') {
+        setGosreestrStatus('invalid');
+        notification.warning('Тип СИ не действует', 'Данные из Госреестра, но тип не является действующим');
+      } else {
+        setGosreestrStatus('found');
+      }
+      
+      // Автозаполнение полей
+      const mapped = mapToInstrument(card);
+      setFormData(prev => ({
+        ...prev,
+        name: mapped.name || prev.name,
+        type: mapped.type || prev.type,
+        manufacturer: mapped.manufacturer || prev.manufacturer,
+        intervalMonths: mapped.intervalMonths || prev.intervalMonths,
+      }));
+      
+      setDescriptionLink(card.descriptionLink || null);
+      setMethodLink(card.methodLink || null);
+      
+      playSuccess();
+      notification.success('Данные из Госреестра', `Заполнены поля для ${card.name}`);
+    } else {
+      setGosreestrStatus('not_found');
+      notification.error('Не найдено в Госреестре', 'Заполните поля вручную');
+    }
+  }, [notification]);
+
+  // Скачивание вложения
+  const handleDownloadAttachment = useCallback(async (link: string, filename: string) => {
+    const blob = await downloadAttachment(link);
+    if (blob) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } else {
+      notification.error('Ошибка скачивания', 'Не удалось скачать файл');
+    }
+  }, [notification]);
 
   const getStatusBadge = (item: MeasuringInstrument) => {
     if (item.status === 'decommissioned') return <span className="px-2 py-0.5 rounded-full text-xs bg-slate-500/20 text-slate-400">Списано</span>;
@@ -157,6 +228,85 @@ export default function Instruments({ theme, userId, userRole, initialFilter, on
           <div className={`w-full max-w-6xl rounded-xl p-6 ${isDark ? 'bg-slate-800' : 'bg-white'} max-h-[90vh] overflow-y-auto`}>
             <div className="flex items-center justify-between mb-6"><h2 className="text-xl font-bold">{editItem ? 'Редактировать СИ' : 'Новое средство измерения'}</h2><button onClick={() => { setShowForm(false); setValidationErrors({}); }} className="p-1 rounded-lg hover:bg-slate-700/30"><X size={20} /></button></div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="md:col-span-3">
+                <label className="text-xs text-slate-400 mb-1 flex items-center gap-1">
+                  <Database size={12} />
+                  Поиск в Госреестре СИ (номер или наименование)
+                </label>
+                <div className="relative">
+                  <input 
+                    value={gosreestrQuery} 
+                    onChange={e => { setGosreestrQuery(e.target.value); setShowGosreestrHints(true); setGosreestrStatus('idle'); }}
+                    onFocus={() => setShowGosreestrHints(true)}
+                    placeholder="Например: 52797-13 или Р2М-18А"
+                    className={`${inputClass} text-base pr-10`}
+                  />
+                  {gosreestrLoading && (
+                    <Loader2 size={18} className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-cyan-400" />
+                  )}
+                  
+                  {/* Статус бейдж */}
+                  {gosreestrStatus === 'found' && (
+                    <div className="mt-2 px-3 py-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-sm flex items-center gap-2">
+                      <CheckCircle size={16} />
+                      Данные из Госреестра
+                    </div>
+                  )}
+                  {gosreestrStatus === 'invalid' && (
+                    <div className="mt-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 text-sm flex items-center gap-2">
+                      <AlertCircle size={16} />
+                      Тип не действует
+                    </div>
+                  )}
+                  {gosreestrStatus === 'not_found' && (
+                    <div className="mt-2 px-3 py-2 rounded-lg bg-slate-500/10 border border-slate-500/30 text-slate-400 text-sm">
+                      Не найдено в Госреестре — заполните вручную
+                    </div>
+                  )}
+                  
+                  {/* Выпадающий список подсказок */}
+                  {showGosreestrHints && hints.length > 0 && (
+                    <div className="absolute z-10 w-full mt-1 bg-slate-800 border border-slate-700 rounded-lg shadow-xl max-h-64 overflow-y-auto">
+                      {hints.map(hint => (
+                        <button
+                          key={hint.id}
+                          onClick={() => handleGosreestrSelect(hint.id)}
+                          className="w-full text-left px-4 py-3 hover:bg-slate-700 border-b border-slate-700 last:border-b-0 transition-colors"
+                        >
+                          <div className="text-base font-medium text-white">{hint.designation}</div>
+                          <div className="text-sm text-slate-400">{hint.number} | {hint.manufacturer}</div>
+                          <div className="text-xs text-slate-500 truncate">{hint.name}</div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                
+                {/* Кнопки скачивания вложений */}
+                {(descriptionLink || methodLink) && (
+                  <div className="flex gap-2 mt-2">
+                    {descriptionLink && (
+                      <button
+                        onClick={() => handleDownloadAttachment(descriptionLink, `Описание_типа_${formData.type || 'СИ'}.pdf`)}
+                        className="flex items-center gap-1 px-3 py-1.5 bg-cyan-500/20 text-cyan-400 rounded-lg text-sm hover:bg-cyan-500/30"
+                      >
+                        <Download size={14} />
+                        Описание типа
+                      </button>
+                    )}
+                    {methodLink && (
+                      <button
+                        onClick={() => handleDownloadAttachment(methodLink, `Методика_поверки_${formData.type || 'СИ'}.pdf`)}
+                        className="flex items-center gap-1 px-3 py-1.5 bg-purple-500/20 text-purple-400 rounded-lg text-sm hover:bg-purple-500/30"
+                      >
+                        <Download size={14} />
+                        Методика поверки
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+              
               <div><label className="text-xs text-slate-400 mb-1 block">Инв. номер</label><input value={formData.inventoryNumber} onChange={e => setFormData({...formData, inventoryNumber: e.target.value})} className={`${inputClass} ${validationErrors.inventoryNumber ? 'border-red-500' : ''}`} /></div>
               <div className="md:col-span-2"><label className="text-xs text-slate-400 mb-1 block">Наименование</label><input value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className={`${inputClass} ${validationErrors.name ? 'border-red-500' : ''}`} /></div>
               <div><label className="text-xs text-slate-400 mb-1 block">Категория</label><select value={formData.category} onChange={e => setFormData({...formData, category: e.target.value, customFields: {}})} className={inputClass}><option value="">Выберите</option>{categories.map(cat => <option key={cat.id} value={cat.name}>{cat.name}</option>)}</select></div>
