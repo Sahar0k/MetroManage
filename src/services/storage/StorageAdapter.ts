@@ -18,6 +18,9 @@ import {
 } from '../../types';
 
 export interface StorageAdapter {
+  // Initialization
+  initStorage(): Promise<void>;
+  
   // Instruments
   getInstruments(): MeasuringInstrument[];
   addInstrument(instrument: Omit<MeasuringInstrument, 'id'>): MeasuringInstrument;
