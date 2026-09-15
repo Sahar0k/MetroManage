@@ -12,6 +12,7 @@
     "@dnd-kit/sortable": "^8.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "@supabase/supabase-js": "^2.98.0",
+    "bwip-js": "^4.11.4",
     "canvas-confetti": "^1.9.3",
     "date-fns": "^2.30.0",
     "framer-motion": "^11.16.1",
@@ -19,7 +20,7 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.8.0",
-    "recharts": "^2.10.0",
+    "recharts": "^2.15.4",
     "uuid": "^9.0.1"
   },
   "devDependencies": {
@@ -27,7 +28,7 @@
     "@types/canvas-confetti": "^1.6.4",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
-    "@types/uuid": "^9.0.7",
+    "@types/uuid": "^9.0.8",
     "@vitejs/plugin-react": "^4.3.4",
     "tailwindcss": "^4.1.7",
     "typescript": "^5.7.0",
