@@ -15,6 +15,7 @@ const Personnel = lazy(() => import('./pages/Personnel'));
 const OperationsLog = lazy(() => import('./pages/OperationsLog'));
 const Scanner = lazy(() => import('./pages/Scanner'));
 const ImportPage = lazy(() => import('./pages/ImportPage'));
+const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 
 const LoadingSpinner = () => (
   <div className="flex items-center justify-center min-h-[400px]">
@@ -90,6 +91,7 @@ function AppContent() {
       case 'operations': return <OperationsLog theme={theme} />;
       case 'scanner': return <Scanner theme={theme} />;
       case 'import': return <ImportPage theme={theme} />;
+      case 'settings': return <SettingsPage theme={theme} />;
       default: return <Instruments theme={theme} userId={userId} userRole={userRole} initialFilter={currentFilter} onNavigate={handleNavigate} />;
     }
   };

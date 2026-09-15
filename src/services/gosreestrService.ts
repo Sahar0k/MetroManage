@@ -3,6 +3,8 @@
  * Все запросы через прокси /api/gosreestr
  */
 
+import { indexedDBCache } from './indexedDBCache';
+
 export interface GosreestrHint {
   id: string;
   name: string;
@@ -330,4 +332,187 @@ export function mapToInstrument(card: GosreestrCard): Partial<{
 export function clearCache(): void {
   hintsCache.clear();
   cardsCache.clear();
+}
+
+// === Настройка доступа к Госреестру ===
+
+const SETTINGS_KEY = 'gosreestr_access_enabled';
+
+/**
+ * Проверка, включён ли доступ к Госреестру
+ */
+export async function isGosreestrAccessEnabled(): Promise<boolean> {
+  try {
+    const enabled = await indexedDBCache.getSetting(SETTINGS_KEY);
+    return enabled !== false; // По умолчанию включено
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * Установка настройки доступа к Госреестру
+ */
+export async function setGosreestrAccessEnabled(enabled: boolean): Promise<void> {
+  await indexedDBCache.setSetting(SETTINGS_KEY, enabled);
+}
+
+/**
+ * Поиск с поддержкой клиентского кэша
+ */
+export async function searchByQueryWithCache(
+  query: string,
+  signal?: AbortSignal
+): Promise<{ hints: GosreestrHint[]; fromCache: boolean; cacheDate?: number }> {
+  // Проверка настройки доступа
+  const accessEnabled = await isGosreestrAccessEnabled();
+  
+  if (!accessEnabled) {
+    return { hints: [], fromCache: false };
+  }
+
+  try {
+    // Попытка получить из сети
+    const hints = await searchByQuery(query, signal);
+    
+    // Кэшируем результаты в IndexedDB
+    if (hints.length > 0) {
+      await indexedDBCache.cacheCard(`search:${query}`, hints);
+    }
+    
+    return { hints, fromCache: false };
+  } catch (error) {
+    // При ошибке сети пытаемся получить из кэша
+    try {
+      const cached = await indexedDBCache.getCachedCard(`search:${query}`);
+      if (cached) {
+        return { 
+          hints: cached.data, 
+          fromCache: true, 
+          cacheDate: cached.timestamp 
+        };
+      }
+    } catch {
+      // Игнорируем ошибки кэша
+    }
+    
+    return { hints: [], fromCache: false };
+  }
+}
+
+/**
+ * Получение карточки с поддержкой клиентского кэша
+ */
+export async function fetchCardWithCache(
+  id: string,
+  signal?: AbortSignal
+): Promise<{ card: GosreestrCard | null; fromCache: boolean; cacheDate?: number }> {
+  // Проверка настройки доступа
+  const accessEnabled = await isGosreestrAccessEnabled();
+  
+  if (!accessEnabled) {
+    // Пытаемся получить из кэша
+    try {
+      const cached = await indexedDBCache.getCachedCard(id);
+      if (cached) {
+        return { 
+          card: cached.data, 
+          fromCache: true, 
+          cacheDate: cached.timestamp 
+        };
+      }
+    } catch {
+      // Игнорируем ошибки кэша
+    }
+    return { card: null, fromCache: false };
+  }
+
+  try {
+    // Попытка получить из сети
+    const card = await fetchCard(id, signal);
+    
+    // Кэшируем в IndexedDB
+    if (card) {
+      await indexedDBCache.cacheCard(id, card);
+    }
+    
+    return { card, fromCache: false };
+  } catch (error) {
+    // При ошибке сети пытаемся получить из кэша
+    try {
+      const cached = await indexedDBCache.getCachedCard(id);
+      if (cached) {
+        return { 
+          card: cached.data, 
+          fromCache: true, 
+          cacheDate: cached.timestamp 
+        };
+      }
+    } catch {
+      // Игнорируем ошибки кэша
+    }
+    
+    return { card: null, fromCache: false };
+  }
+}
+
+/**
+ * Проверка свежести кэша при старте приложения
+ */
+export async function checkCacheFreshness(
+  onProgress?: (current: number, total: number) => void
+): Promise<{ checked: number; updated: number }> {
+  const accessEnabled = await isGosreestrAccessEnabled();
+  if (!accessEnabled) {
+    return { checked: 0, updated: 0 };
+  }
+
+  try {
+    const staleCards = await indexedDBCache.getStaleCards(30);
+    const limit = Math.min(staleCards.length, 20); // Лимит 20 проверок за старт
+    
+    let updated = 0;
+    
+    for (let i = 0; i < limit; i++) {
+      const card = staleCards[i];
+      
+      // Пропускаем поисковые запросы
+      if (card.id.startsWith('search:')) continue;
+      
+      onProgress?.(i + 1, limit);
+      
+      try {
+        await waitForRateLimit();
+        
+        const response = await fetch(`/api/gosreestr/api/registry/4/items/${card.id}/plaindata`, {
+          headers: {
+            'User-Agent': 'Metrolog-Manage/1.0',
+          },
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          const item = data.result.items[0];
+          
+          if (item) {
+            // Обновляем только статус
+            const statusProp = item.properties.find((p: any) => p.name === 'foei:StatusSI');
+            if (statusProp) {
+              const updatedCard = { ...card.data, status: statusProp.value };
+              await indexedDBCache.cacheCard(card.id, updatedCard);
+              updated++;
+            }
+          }
+        }
+      } catch (error) {
+        // Игнорируем ошибки, продолжаем проверку
+        console.error('Freshness check error:', error);
+      }
+    }
+    
+    return { checked: limit, updated };
+  } catch (error) {
+    console.error('Cache freshness check failed:', error);
+    return { checked: 0, updated: 0 };
+  }
 }

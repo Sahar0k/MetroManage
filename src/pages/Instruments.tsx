@@ -4,14 +4,14 @@ import { MeasuringInstrument, Role } from '../types';
 import { formatDate, hasPermission, isVerificationExpired, isVerificationDueSoon } from '../utils/domain';
 import { playSuccess, playError } from '../utils/audio';
 import { useNotification } from '../contexts/NotificationContext';
-import { Search, Plus, CheckCircle, X, Package, Filter, Settings, Clock, Database, Loader2, AlertCircle, Download } from 'lucide-react';
+import { Search, Plus, CheckCircle, X, Package, Filter, Settings, Clock, Database, Loader2, AlertCircle, Download, WifiOff } from 'lucide-react';
 import InstrumentCard from '../components/InstrumentCard';
 import InstrumentDetailModal from '../components/InstrumentDetailModal';
 import FilterBuilder from '../components/FilterBuilder';
 import CategoryBuilder from '../components/CategoryBuilder';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { useGosreestrSearch } from '../hooks/useGosreestrSearch';
-import { fetchCard, mapToInstrument, downloadAttachment } from '../services/gosreestrService';
+import { fetchCardWithCache, mapToInstrument, downloadAttachment, isGosreestrAccessEnabled } from '../services/gosreestrService';
 
 interface InstrumentsProps { theme: 'dark' | 'light'; userId: string | null; userRole: Role; initialFilter?: string; onNavigate?: (page: string, filter?: string, instrumentId?: string) => void; }
 
@@ -36,11 +36,22 @@ export default function Instruments({ theme, userId, userRole, initialFilter, on
   // Госреестр СИ
   const [gosreestrQuery, setGosreestrQuery] = useState('');
   const [showGosreestrHints, setShowGosreestrHints] = useState(false);
-  const [gosreestrStatus, setGosreestrStatus] = useState<'idle' | 'loading' | 'found' | 'not_found' | 'invalid'>('idle');
+  const [gosreestrStatus, setGosreestrStatus] = useState<'idle' | 'loading' | 'found' | 'not_found' | 'invalid' | 'isolated'>('idle');
   const [selectedGosreestrId, setSelectedGosreestrId] = useState<string | null>(null);
   const [descriptionLink, setDescriptionLink] = useState<string | null>(null);
   const [methodLink, setMethodLink] = useState<string | null>(null);
+  const [gosreestrAccessEnabled, setGosreestrAccessEnabled] = useState(true);
   const { hints, loading: gosreestrLoading } = useGosreestrSearch(gosreestrQuery);
+
+  // Проверка настройки доступа к Госреестру
+  useEffect(() => {
+    isGosreestrAccessEnabled().then(enabled => {
+      setGosreestrAccessEnabled(enabled);
+      if (!enabled) {
+        setGosreestrStatus('isolated');
+      }
+    });
+  }, [showForm]);
 
   useEffect(() => { setActiveFilter(initialFilter); }, [initialFilter]);
   const isDark = theme === 'dark';
@@ -119,7 +130,7 @@ export default function Instruments({ theme, userId, userRole, initialFilter, on
     setShowGosreestrHints(false);
     setSelectedGosreestrId(hintId);
     
-    const card = await fetchCard(hintId);
+    const { card, fromCache, cacheDate } = await fetchCardWithCache(hintId);
     
     if (card) {
       if (card.status !== 'Действует') {
@@ -143,7 +154,12 @@ export default function Instruments({ theme, userId, userRole, initialFilter, on
       setMethodLink(card.methodLink || null);
       
       playSuccess();
-      notification.success('Данные из Госреестра', `Заполнены поля для ${card.name}`);
+      if (fromCache) {
+        const dateStr = cacheDate ? new Date(cacheDate).toLocaleDateString('ru-RU') : '';
+        notification.info('Данные из кэша', `Заполнены поля для ${card.name} (кэш от ${dateStr})`);
+      } else {
+        notification.success('Данные из Госреестра', `Заполнены поля для ${card.name}`);
+      }
     } else {
       setGosreestrStatus('not_found');
       notification.error('Не найдено в Госреестре', 'Заполните поля вручную');
@@ -261,6 +277,12 @@ export default function Instruments({ theme, userId, userRole, initialFilter, on
                   {gosreestrStatus === 'not_found' && (
                     <div className="mt-2 px-3 py-2 rounded-lg bg-slate-500/10 border border-slate-500/30 text-slate-400 text-sm">
                       Не найдено в Госреестре — заполните вручную
+                    </div>
+                  )}
+                  {gosreestrStatus === 'isolated' && (
+                    <div className="mt-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 text-sm flex items-center gap-2">
+                      <WifiOff size={16} />
+                      Изолированный контур — автозаполнение отключено
                     </div>
                   )}
                   
