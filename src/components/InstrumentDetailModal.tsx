@@ -14,6 +14,7 @@ interface InstrumentDetailModalProps {
   onReturn: (instrument: MeasuringInstrument) => void;
   onCreateCard: (instrument: MeasuringInstrument) => void;
   onViewSimilar?: (instrument: MeasuringInstrument) => void;
+  onViewProtocol?: (protocol: VerificationProtocol) => void;
 }
 
 type TabId = 'main' | 'metrology' | 'docs' | 'history' | 'maintenance';
@@ -24,18 +25,6 @@ const TABS: { id: TabId; label: string; icon: any }[] = [
   { id: 'history', label: 'История', icon: History },
   { id: 'maintenance', label: 'Обслуживание', icon: WrenchIcon },
 ];
-
-interface InstrumentDetailModalProps {
-  instrument: MeasuringInstrument;
-  onClose: () => void;
-  onEdit: (instrument: MeasuringInstrument) => void;
-  onDelete: (instrument: MeasuringInstrument) => void;
-  onIssue: (instrument: MeasuringInstrument) => void;
-  onReturn: (instrument: MeasuringInstrument) => void;
-  onCreateCard: (instrument: MeasuringInstrument) => void;
-  onViewSimilar?: (instrument: MeasuringInstrument) => void;
-  onViewProtocol?: (protocol: VerificationProtocol) => void;
-}
 
 function Logo() {
   return (
@@ -95,8 +84,8 @@ export default function InstrumentDetailModal({ instrument, onClose, onEdit, onD
   }, [instrument]);
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
-      <div className="bg-slate-900 rounded-2xl max-w-6xl w-full my-8 shadow-2xl border border-slate-800 overflow-hidden">
+    <div onClick={onClose} className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
+      <div onClick={(e) => e.stopPropagation()} className="bg-slate-900 rounded-2xl max-w-6xl w-full my-8 shadow-2xl border border-slate-800 overflow-hidden">
         <div className="relative bg-gradient-to-br from-slate-900 via-slate-900 to-slate-800 border-b border-slate-800 px-8 py-6">
           <div className="flex items-start justify-between gap-6">
             <div className="flex items-start gap-5 min-w-0">
