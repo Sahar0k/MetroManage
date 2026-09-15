@@ -163,20 +163,36 @@ limit_req_zone $binary_remote_addr zone=api_limit:10m rate=1r/s;
 ```javascript
 export default async function handler(req, res) {
   const { path } = req.query;
-  const targetUrl = `https://fgis.gost.ru/fundmetrology/${path.join('/')}`;
+  
+  // path может быть строкой или массивом
+  const pathArray = Array.isArray(path) ? path : [path];
+  const targetUrl = `https://fgis.gost.ru/fundmetrology/${pathArray.join('/')}`;
   
   try {
-    const response = await fetch(targetUrl, {
-      headers: {
-        'User-Agent': 'Metrolog-Manage/1.0',
-        ...req.headers,
-      },
-    });
+    // Whitelist заголовков (не передаём cookie, host и т.д.)
+    const headers = {
+      'User-Agent': req.headers['user-agent'] || 'Metrolog-Manage/1.0',
+      'Accept': req.headers['accept'] || 'application/json',
+    };
     
+    const response = await fetch(targetUrl, { headers });
+    
+    const contentType = response.headers.get('content-type') || 'application/json';
+    
+    // Обработка бинарных ответов (PDF)
+    if (contentType.includes('application/pdf') || contentType.includes('application/octet-stream')) {
+      const buffer = await response.arrayBuffer();
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Content-Length', buffer.byteLength);
+      return res.status(response.status).send(Buffer.from(buffer));
+    }
+    
+    // JSON ответы
     const data = await response.json();
     res.status(response.status).json(data);
   } catch (error) {
-    res.status(500).json({ error: 'Proxy error' });
+    console.error('Proxy error:', error);
+    res.status(500).json({ error: 'Proxy error', message: error.message });
   }
 }
 ```
@@ -215,3 +231,87 @@ export default async function handler(req, res) {
 4. Content-Type должен быть `application/pdf`
 
 Если PDF открывается как текст или повреждён — проверьте, что Vercel-функция использует `Buffer.from(arrayBuffer)` вместо `response.json()`.
+
+---
+
+## Режим отладки: переключение источника данных
+
+### Концепция
+
+Приложение поддерживает два режима хранения данных:
+- **Локальный режим** (по умолчанию) — данные хранятся в localStorage браузера
+- **Серверный режим** — данные хранятся на сервере PocketBase
+
+Переключение между режимами происходит без пересборки приложения через настройки.
+
+### Настройка PocketBase
+
+1. Установите PocketBase: https://pocketbase.io/docs/
+2. Запустите сервер:
+   ```bash
+   ./pocketbase serve --http=127.0.0.1:8090
+   ```
+3. Создайте администратора через веб-интерфейс: http://127.0.0.1:8090/_/
+4. Создайте коллекции:
+   - `instruments` — средства измерений
+   - `employees` — сотрудники
+   - `departments` — отделы
+   - `warehouses` — склады
+   - `categories` — категории СИ
+   - `issues` — выдачи СИ
+   - `sendoffs` — отправки на поверку
+   - `protocols` — протоколы поверок
+   - `operations` — журнал операций
+
+### Переключение источника данных
+
+1. Откройте **Настройки** → **Источник данных**
+2. Выберите режим:
+   - **Локально (браузер)** — данные в localStorage
+   - **Сервер (PocketBase)** — данные на сервере
+3. Укажите URL сервера (по умолчанию: `http://127.0.0.1:8090`)
+4. Нажмите **Проверить соединение**
+5. Нажмите **Применить**
+
+### Индикатор источника данных
+
+В боковой панели отображается бейдж текущего источника:
+- **Данные: ЛОКАЛЬНО** (серый) — локальный режим
+- **Данные: СЕРВЕР <url>** (зелёный) — серверный режим
+
+### Перенос данных
+
+Страница **Перенос данных** позволяет мигрировать данные между хранилищами:
+
+1. Откройте **Перенос данных**
+2. Просмотрите статистику (количество записей в каждом хранилище)
+3. Выберите направление:
+   - **Локально → Сервер** — загрузить данные на сервер
+   - **Сервер → Локально** — скачать данные в браузер
+4. Дождитесь завершения миграции
+
+**Важно:**
+- Перед миграцией убедитесь, что сервер доступен
+- Рекомендуется создать резервную копию данных
+- При конфликтах (одинаковые ID) используется стратегия "последняя запись побеждает"
+
+### Архитектура адаптеров
+
+```
+src/services/storage/
+├── StorageAdapter.ts       # Интерфейс адаптера
+├── localAdapter.ts         # Адаптер для localStorage
+├── pocketbaseAdapter.ts    # Адаптер для PocketBase
+└── index.ts                # Фабрика адаптеров
+```
+
+Все адаптеры реализуют единый интерфейс `StorageAdapter`, что обеспечивает взаимозаменяемость.
+
+### Тестирование
+
+Контрактные тесты (`src/services/storage/__tests__/adapter.test.ts`) проверяют, что оба адаптера корректно реализуют CRUD-операции для всех сущностей.
+
+Запуск тестов:
+```bash
+npm run test
+```

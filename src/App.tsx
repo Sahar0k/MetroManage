@@ -9,6 +9,7 @@ import { unlockAudio } from './utils/audio';
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Instruments = lazy(() => import('./pages/Instruments'));
 const Verification = lazy(() => import('./pages/Verification'));
+const VerificationRegistration = lazy(() => import('./pages/VerificationRegistration'));
 
 const IssueReturn = lazy(() => import('./pages/IssueReturn'));
 const Personnel = lazy(() => import('./pages/Personnel'));
@@ -16,6 +17,7 @@ const OperationsLog = lazy(() => import('./pages/OperationsLog'));
 const Scanner = lazy(() => import('./pages/Scanner'));
 const ImportPage = lazy(() => import('./pages/ImportPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
+const MigrationPage = lazy(() => import('./pages/MigrationPage'));
 
 const LoadingSpinner = () => (
   <div className="flex items-center justify-center min-h-[400px]">
@@ -30,6 +32,8 @@ function AppContent() {
   const [currentPage, setCurrentPage] = useState('dashboard');
   const [currentFilter, setCurrentFilter] = useState<string | undefined>(undefined);
   const [initialInstrumentId, setInitialInstrumentId] = useState<string | null>(null);
+  const [prefillComment, setPrefillComment] = useState<string | null>(null);
+  const [prefillSendoffId, setPrefillSendoffId] = useState<string | null>(null);
   const [showDataSourceModal, setShowDataSourceModal] = useState(false);
   const [userRole, setUserRole] = useState<'guest' | 'metrologist'>(() => {
     const user = store.getCurrentUser();
@@ -72,10 +76,12 @@ function AppContent() {
     if (userRole === 'guest' && currentPage !== 'instruments') { setCurrentPage('instruments'); }
   }, [userRole, currentPage]);
 
-  const handleNavigate = useCallback((page: string, filter?: string, instrumentId?: string) => {
+  const handleNavigate = useCallback((page: string, filter?: string, instrumentId?: string, comment?: string, sendoffId?: string) => {
     setCurrentPage(page);
     if (filter !== undefined) setCurrentFilter(filter); else setCurrentFilter(undefined);
     if (instrumentId !== undefined) setInitialInstrumentId(instrumentId); else setInitialInstrumentId(null);
+    if (comment !== undefined) setPrefillComment(comment); else setPrefillComment(null);
+    if (sendoffId !== undefined) setPrefillSendoffId(sendoffId); else setPrefillSendoffId(null);
   }, []);
 
   const handleDataSourceClick = useCallback(() => { setShowDataSourceModal(true); }, []);
@@ -85,6 +91,7 @@ function AppContent() {
       case 'dashboard': return <Dashboard theme={theme} onNavigate={handleNavigate} />;
       case 'instruments': return <Instruments theme={theme} userId={userId} userRole={userRole} initialFilter={currentFilter} onNavigate={handleNavigate} />;
       case 'verification': return <Verification theme={theme} onNavigate={handleNavigate} />;
+      case 'verification-registration': return <VerificationRegistration theme={theme} userId={userId} prefillInstrumentId={initialInstrumentId} prefillComment={prefillComment} prefillSendoffId={prefillSendoffId} />;
 
       case 'issue-return': return <IssueReturn theme={theme} userId={userId} userRole={userRole} initialInstrumentId={initialInstrumentId} />;
       case 'personnel': return <Personnel theme={theme} userId={userId} userRole={userRole} />;
@@ -92,6 +99,7 @@ function AppContent() {
       case 'scanner': return <Scanner theme={theme} />;
       case 'import': return <ImportPage theme={theme} />;
       case 'settings': return <SettingsPage theme={theme} />;
+      case 'migration': return <MigrationPage theme={theme} />;
       default: return <Instruments theme={theme} userId={userId} userRole={userRole} initialFilter={currentFilter} onNavigate={handleNavigate} />;
     }
   };

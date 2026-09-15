@@ -132,7 +132,20 @@ export interface DashboardStats {
   totalDepartments: number;
 }
 
-// === Рабочее место поверителя ===
+// === Регистрация поверок (упрощённая форма без ручного ввода точек) ===
+
+export interface VerificationSendoff {
+  id: string;
+  instrumentId: string;
+  destination: string;
+  sentAt: string;
+  responsibleId: string | null;
+  expectedReturnDate: string | null;
+  status: 'sent' | 'returned';
+  returnedAt: string | null;
+  protocolId: string | null;
+  comment: string;
+}
 
 export interface VerificationPoint {
   id: string;
