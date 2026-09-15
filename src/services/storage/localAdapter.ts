@@ -36,6 +36,18 @@ const STORAGE_KEYS = {
 };
 
 export class LocalStorageAdapter implements StorageAdapter {
+  /**
+   * Инициализация адаптера: для localStorage это просто проверка доступности
+   */
+  async initStorage(): Promise<void> {
+    // localStorage всегда доступен, просто проверяем
+    try {
+      localStorage.getItem('test');
+    } catch (error) {
+      throw new Error('LocalStorage not available');
+    }
+  }
+
   // Instruments
   getInstruments(): MeasuringInstrument[] {
     const data = localStorage.getItem(STORAGE_KEYS.instruments);
