@@ -301,7 +301,8 @@ export function importToStore(
       category: inst.category || 'Без категории',
       range: inst.range || '—',
       accuracy: inst.accuracy || '—',
-    } as Omit<MeasuringInstrument, 'id' | 'nextVerificationDate'>);
+      nextVerificationDate: null,
+    } as Omit<MeasuringInstrument, 'id'>);
     
     imported++;
   });

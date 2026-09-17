@@ -1,7 +1,8 @@
 import { v4 as uuidv4 } from 'uuid';
-import { User, Department, Employee, MeasuringInstrument, Warehouse, IssueRecord, OperationLog, DashboardStats, InstrumentCategory, VerificationProtocol } from './types';
+import { User, Department, Employee, MeasuringInstrument, Warehouse, IssueRecord, OperationLog, DashboardStats, InstrumentCategory, VerificationProtocol, VerificationSendoff } from './types';
 import { calculateNextVerification, isVerificationExpired, isVerificationDueSoon } from './utils/domain';
 import { CATEGORY_TEMPLATES } from './utils/customFields';
+import { getStorageAdapter, StorageAdapter } from './services/storage';
 
 let scannerOnline = false;
 let scannerListeners: Array<() => void> = [];
@@ -18,20 +19,6 @@ export const scannerStatus = {
       scannerListeners = scannerListeners.filter(l => l !== listener);
     };
   }
-};
-
-const STORAGE_KEYS = {
-  users: 'mk_users',
-  departments: 'mk_departments',
-  employees: 'mk_employees',
-  instruments: 'mk_instruments',
-  warehouses: 'mk_warehouses',
-  issues: 'mk_issues',
-  operations: 'mk_operations',
-  currentUser: 'mk_current_user',
-  theme: 'mk_theme',
-  dataVersion: 'mk_data_version',
-  categories: 'mk_categories',
 };
 
 const CURRENT_DATA_VERSION = '6.2';
@@ -138,102 +125,6 @@ function getSeedInstruments(warehouses: Warehouse[]): MeasuringInstrument[] {
     });
   }
 
-  // Добавляем тестовые приборы на поверке
-  const verificationInstruments: MeasuringInstrument[] = [
-    {
-      id: uuidv4(),
-      inventoryNumber: 'СИ-ВРФ-001',
-      name: 'Анализатор спектра Rohde & Schwarz FSV',
-      category: 'Анализатор спектра',
-      type: 'FSV',
-      serialNumber: 'FSV-2020-5001',
-      manufacturer: 'Rohde & Schwarz',
-      range: '10 МГц - 43 ГГц',
-      accuracy: '±0.5 дБ',
-      status: 'verification',
-      lastVerificationDate: new Date(today.getFullYear() - 1, today.getMonth(), 15).toISOString().split('T')[0],
-      intervalMonths: 12,
-      nextVerificationDate: calculateNextVerification(new Date(today.getFullYear() - 1, today.getMonth(), 15).toISOString().split('T')[0], 12),
-      location: 'Метрологическая служба',
-      warehouseId: null,
-      customFields: { freq_min: 10000, freq_max: 43000000000, dyn_range: 115, phase_noise: -105 }
-    },
-    {
-      id: uuidv4(),
-      inventoryNumber: 'СИ-ВРФ-002',
-      name: 'Осциллограф Rohde & Schwarz RTO1024',
-      category: 'Осциллограф',
-      type: 'RTO1024',
-      serialNumber: 'RTO-2019-3002',
-      manufacturer: 'Rohde & Schwarz',
-      range: '100 МГц - 2 ГГц',
-      accuracy: '±2%',
-      status: 'verification',
-      lastVerificationDate: new Date(today.getFullYear() - 1, today.getMonth() - 2, 10).toISOString().split('T')[0],
-      intervalMonths: 12,
-      nextVerificationDate: calculateNextVerification(new Date(today.getFullYear() - 1, today.getMonth() - 2, 10).toISOString().split('T')[0], 12),
-      location: 'Метрологическая служба',
-      warehouseId: null,
-      customFields: { bandwidth: 2000, channels: 4, sample_rate: 10, memory_depth: 100 }
-    },
-    {
-      id: uuidv4(),
-      inventoryNumber: 'СИ-ВРФ-003',
-      name: 'Мультиметр Keysight 34465A',
-      category: 'Мультиметр',
-      type: '34465A',
-      serialNumber: '34465A-2021-7003',
-      manufacturer: 'Keysight',
-      range: '0-1000 В',
-      accuracy: '±0.02%',
-      status: 'verification',
-      lastVerificationDate: new Date(today.getFullYear() - 1, today.getMonth() - 1, 20).toISOString().split('T')[0],
-      intervalMonths: 12,
-      nextVerificationDate: calculateNextVerification(new Date(today.getFullYear() - 1, today.getMonth() - 1, 20).toISOString().split('T')[0], 12),
-      location: 'Метрологическая служба',
-      warehouseId: null,
-      customFields: { voltage_dc_max: 1000, voltage_ac_max: 750, current_max: 3, digits: 6.5 }
-    },
-    {
-      id: uuidv4(),
-      inventoryNumber: 'СИ-ВРФ-004',
-      name: 'Генератор сигналов Rohde & Schwarz SMA100B',
-      category: 'Генератор сигналов',
-      type: 'SMA100B',
-      serialNumber: 'SMA-2020-4004',
-      manufacturer: 'Rohde & Schwarz',
-      range: '100 кГц - 43 ГГц',
-      accuracy: '±0.1 дБ',
-      status: 'verification',
-      lastVerificationDate: new Date(today.getFullYear() - 1, today.getMonth() - 3, 5).toISOString().split('T')[0],
-      intervalMonths: 12,
-      nextVerificationDate: calculateNextVerification(new Date(today.getFullYear() - 1, today.getMonth() - 3, 5).toISOString().split('T')[0], 12),
-      location: 'Метрологическая служба',
-      warehouseId: null,
-      customFields: { freq_min: 100000, freq_max: 43000000000, power_max: 27, modulation: 'AM' }
-    },
-    {
-      id: uuidv4(),
-      inventoryNumber: 'СИ-ВРФ-005',
-      name: 'Измеритель LCR Keysight E4980A',
-      category: 'Измеритель LCR',
-      type: 'E4980A',
-      serialNumber: 'E4980A-2019-6005',
-      manufacturer: 'Keysight',
-      range: '20 Гц - 2 МГц',
-      accuracy: '±0.05%',
-      status: 'verification',
-      lastVerificationDate: new Date(today.getFullYear() - 1, today.getMonth() - 4, 25).toISOString().split('T')[0],
-      intervalMonths: 12,
-      nextVerificationDate: calculateNextVerification(new Date(today.getFullYear() - 1, today.getMonth() - 4, 25).toISOString().split('T')[0], 12),
-      location: 'Метрологическая служба',
-      warehouseId: null,
-      customFields: { freq_test: 1, l_range: '100 мкГн - 100 Гн', c_range: '1 пФ - 1 Ф', r_range: '0.01 Ом - 100 МОм' }
-    }
-  ];
-
-  instruments.push(...verificationInstruments);
-
   return instruments;
 }
 
@@ -244,23 +135,23 @@ function getSeedUsers(): User[] {
   ];
 }
 
-function initializeStore(): void {
-  const storedVersion = localStorage.getItem(STORAGE_KEYS.dataVersion);
+async function initializeStore(adapter: StorageAdapter): Promise<void> {
+  await adapter.initStorage();
+  
+  const storedVersion = localStorage.getItem('mk_data_version');
   
   if (storedVersion !== CURRENT_DATA_VERSION) {
-    Object.values(STORAGE_KEYS).forEach(key => {
-      localStorage.removeItem(key);
-    });
-    
     const warehouses = getSeedWarehouses();
     const departments = getSeedDepartments();
-    localStorage.setItem('mk_warehouses', JSON.stringify(warehouses));
-    localStorage.setItem('mk_departments', JSON.stringify(departments));
-    localStorage.setItem('mk_employees', JSON.stringify(getSeedEmployees(departments, warehouses)));
-    localStorage.setItem('mk_instruments', JSON.stringify(getSeedInstruments(warehouses)));
-    localStorage.setItem('mk_users', JSON.stringify(getSeedUsers()));
-    localStorage.setItem('mk_issues', JSON.stringify([]));
-    localStorage.setItem('mk_operations', JSON.stringify([]));
+    
+    warehouses.forEach(w => adapter.addWarehouse(w));
+    departments.forEach(d => adapter.addDepartment(d));
+    getSeedEmployees(departments, warehouses).forEach(e => adapter.addEmployee(e));
+    getSeedInstruments(warehouses).forEach(i => adapter.addInstrument(i));
+    
+    // Users остаются в localStorage (не часть бизнес-данных)
+    const users = getSeedUsers();
+    localStorage.setItem('mk_users', JSON.stringify(users));
     
     const defaultCategories: InstrumentCategory[] = CATEGORY_TEMPLATES.map((template: { category: string; fields: any[] }) => ({
       id: uuidv4(),
@@ -269,53 +160,88 @@ function initializeStore(): void {
       fields: template.fields,
       createdAt: new Date().toISOString()
     }));
-    localStorage.setItem(STORAGE_KEYS.categories, JSON.stringify(defaultCategories));
+    defaultCategories.forEach(c => adapter.addCategory(c));
     
-    localStorage.setItem(STORAGE_KEYS.dataVersion, CURRENT_DATA_VERSION);
+    localStorage.setItem('mk_data_version', CURRENT_DATA_VERSION);
   }
 }
 
-initializeStore();
+let adapter: StorageAdapter | null = null;
+
+export async function initStore(): Promise<void> {
+  adapter = getStorageAdapter();
+  await initializeStore(adapter);
+}
+
+function getAdapter(): StorageAdapter {
+  if (!adapter) {
+    throw new Error('Store not initialized. Call initStore() first.');
+  }
+  return adapter;
+}
 
 export const store = {
+  // Users (остаются в localStorage)
   getUsers: (): User[] => { const data = localStorage.getItem('mk_users'); return data ? JSON.parse(data) : []; },
   getCurrentUser: (): User | null => { const data = localStorage.getItem('mk_current_user'); return data ? JSON.parse(data) : null; },
   setCurrentUser: (user: User | null) => { localStorage.setItem('mk_current_user', JSON.stringify(user)); },
-  getDepartments: (): Department[] => { const data = localStorage.getItem('mk_departments'); return data ? JSON.parse(data) : []; },
-  addDepartment: (dept: Omit<Department, 'id'>): Department => { const departments = store.getDepartments(); const newDept = { ...dept, id: uuidv4() }; departments.push(newDept); localStorage.setItem('mk_departments', JSON.stringify(departments)); return newDept; },
-  updateDepartment: (id: string, updates: Partial<Department>) => { const departments = store.getDepartments().map(d => d.id === id ? { ...d, ...updates } : d); localStorage.setItem('mk_departments', JSON.stringify(departments)); },
-  deleteDepartment: (id: string): { success: boolean; message: string } => { const employees = store.getEmployees().filter(e => e.departmentId === id); if (employees.length > 0) return { success: false, message: `Нельзя удалить отдел: в нём ${employees.length} сотрудник(ов)` }; const departments = store.getDepartments().filter(d => d.id !== id); localStorage.setItem('mk_departments', JSON.stringify(departments)); return { success: true, message: 'Отдел удалён' }; },
-  getWarehouses: (): Warehouse[] => { const data = localStorage.getItem('mk_warehouses'); return data ? JSON.parse(data) : []; },
-  addWarehouse: (warehouse: Omit<Warehouse, 'id'>): Warehouse => { const warehouses = store.getWarehouses(); const newWarehouse = { ...warehouse, id: uuidv4() }; warehouses.push(newWarehouse); localStorage.setItem('mk_warehouses', JSON.stringify(warehouses)); return newWarehouse; },
-  updateWarehouse: (id: string, updates: Partial<Warehouse>) => { const warehouses = store.getWarehouses().map(w => w.id === id ? { ...w, ...updates } : w); localStorage.setItem('mk_warehouses', JSON.stringify(warehouses)); },
-  deleteWarehouse: (id: string): { success: boolean; message: string } => { const employees = store.getEmployees().filter(e => e.warehouseId === id); const instruments = store.getInstruments().filter(i => i.warehouseId === id); if (employees.length > 0 || instruments.length > 0) return { success: false, message: `Нельзя удалить склад: используется` }; const warehouses = store.getWarehouses().filter(w => w.id !== id); localStorage.setItem('mk_warehouses', JSON.stringify(warehouses)); return { success: true, message: 'Склад удалён' }; },
-  getEmployees: (): Employee[] => { const data = localStorage.getItem('mk_employees'); return data ? JSON.parse(data) : []; },
-  addEmployee: (emp: Omit<Employee, 'id'>): Employee => { const employees = store.getEmployees(); const newEmp = { ...emp, id: uuidv4() }; employees.push(newEmp); localStorage.setItem('mk_employees', JSON.stringify(employees)); return newEmp; },
-  updateEmployee: (id: string, updates: Partial<Employee>) => { const employees = store.getEmployees().map(e => e.id === id ? { ...e, ...updates } : e); localStorage.setItem('mk_employees', JSON.stringify(employees)); },
-  deleteEmployee: (id: string) => { const employees = store.getEmployees().filter(e => e.id !== id); localStorage.setItem('mk_employees', JSON.stringify(employees)); },
-  getInstruments: (): MeasuringInstrument[] => { const data = localStorage.getItem('mk_instruments'); return data ? JSON.parse(data) : []; },
-  addInstrument: (inst: Omit<MeasuringInstrument, 'id' | 'nextVerificationDate'>): MeasuringInstrument => { const instruments = store.getInstruments(); const nextVerificationDate = calculateNextVerification(inst.lastVerificationDate, inst.intervalMonths); const newInst = { ...inst, id: uuidv4(), nextVerificationDate }; instruments.push(newInst); localStorage.setItem('mk_instruments', JSON.stringify(instruments)); return newInst; },
-  updateInstrument: (id: string, updates: Partial<MeasuringInstrument>) => { const instruments = store.getInstruments().map(i => { if (i.id === id) { const updated = { ...i, ...updates }; if (updates.lastVerificationDate !== undefined || updates.intervalMonths !== undefined) { updated.nextVerificationDate = calculateNextVerification(updated.lastVerificationDate, updated.intervalMonths); } return updated; } return i; }); localStorage.setItem('mk_instruments', JSON.stringify(instruments)); },
-  deleteInstrument: (id: string) => { const instruments = store.getInstruments().filter(i => i.id !== id); localStorage.setItem('mk_instruments', JSON.stringify(instruments)); },
-  getIssues: (): IssueRecord[] => { const data = localStorage.getItem('mk_issues'); return data ? JSON.parse(data) : []; },
-  addIssue: (issue: Omit<IssueRecord, 'id'>): IssueRecord => { const issues = store.getIssues(); const newIssue = { ...issue, id: uuidv4() }; issues.push(newIssue); localStorage.setItem('mk_issues', JSON.stringify(issues)); return newIssue; },
-  returnInstrument: (issueId: string, userId: string) => { const issues = store.getIssues().map(i => i.id === issueId ? { ...i, returnedAt: new Date().toISOString(), returnedBy: userId } : i); localStorage.setItem('mk_issues', JSON.stringify(issues)); },
-  getOperations: (): OperationLog[] => { const data = localStorage.getItem('mk_operations'); return data ? JSON.parse(data) : []; },
-  addOperation: (op: Omit<OperationLog, 'id' | 'timestamp'>): OperationLog => { const operations = store.getOperations(); const newOp = { ...op, id: uuidv4(), timestamp: new Date().toISOString() }; operations.unshift(newOp); localStorage.setItem('mk_operations', JSON.stringify(operations.slice(0, 500))); return newOp; },
-  getCategories: (): InstrumentCategory[] => { const data = localStorage.getItem(STORAGE_KEYS.categories); return data ? JSON.parse(data) : []; },
-  addCategory: (category: Omit<InstrumentCategory, 'id' | 'createdAt'>): InstrumentCategory => { const categories = store.getCategories(); const newCategory = { ...category, id: uuidv4(), createdAt: new Date().toISOString() }; categories.push(newCategory); localStorage.setItem(STORAGE_KEYS.categories, JSON.stringify(categories)); return newCategory; },
-  updateCategory: (id: string, updates: Partial<Omit<InstrumentCategory, 'id' | 'createdAt'>>) => { const categories = store.getCategories().map(c => c.id === id ? { ...c, ...updates } : c); localStorage.setItem(STORAGE_KEYS.categories, JSON.stringify(categories)); },
-  deleteCategory: (id: string): { success: boolean; message: string } => { const category = store.getCategories().find(c => c.id === id); if (!category) return { success: false, message: 'Категория не найдена' }; const instruments = store.getInstruments(); const hasInstruments = instruments.some(i => i.category === category.name); if (hasInstruments) return { success: false, message: `Нельзя удалить категорию: в ней есть приборы (${instruments.filter(i => i.category === category.name).length} шт.)` }; const categories = store.getCategories().filter(c => c.id !== id); localStorage.setItem(STORAGE_KEYS.categories, JSON.stringify(categories)); return { success: true, message: 'Категория удалена' }; },
-  getDashboardStats: (): DashboardStats => { const instruments = store.getInstruments(); return { totalInstruments: instruments.length, available: instruments.filter(i => i.status === 'available').length, issued: instruments.filter(i => i.status === 'issued').length, expiredVerification: instruments.filter(i => isVerificationExpired(i)).length, verificationDueSoon: instruments.filter(i => isVerificationDueSoon(i)).length, totalEmployees: store.getEmployees().length, totalDepartments: store.getDepartments().length }; },
-  // === Рабочее место поверителя ===
-  getProtocols: (): VerificationProtocol[] => { const data = localStorage.getItem('mk_verification_protocols'); return data ? JSON.parse(data) : []; },
-  addProtocol: (protocol: Omit<VerificationProtocol, 'id' | 'createdAt' | 'updatedAt'>): VerificationProtocol => { const protocols = store.getProtocols(); const newProtocol = { ...protocol, id: uuidv4(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }; protocols.push(newProtocol); localStorage.setItem('mk_verification_protocols', JSON.stringify(protocols)); return newProtocol; },
-  updateProtocol: (id: string, updates: Partial<VerificationProtocol>): VerificationProtocol | null => { const protocols = store.getProtocols(); const protocol = protocols.find(p => p.id === id); if (!protocol) return null; if (protocol.status === 'completed' || protocol.status === 'rejected') { throw new Error('Нельзя изменять завершённый или отклонённый протокол'); } const updated = { ...protocol, ...updates, updatedAt: new Date().toISOString() }; const newProtocols = protocols.map(p => p.id === id ? updated : p); localStorage.setItem('mk_verification_protocols', JSON.stringify(newProtocols)); return updated; },
-  deleteProtocol: (id: string): boolean => { const protocols = store.getProtocols(); const protocol = protocols.find(p => p.id === id); if (!protocol) return false; if (protocol.status === 'completed' || protocol.status === 'rejected') { throw new Error('Нельзя удалить завершённый или отклонённый протокол'); } const newProtocols = protocols.filter(p => p.id !== id); localStorage.setItem('mk_verification_protocols', JSON.stringify(newProtocols)); return true; },
   
-  // === Отправки на поверку ===
-  getSendoffs: (): import('./types').VerificationSendoff[] => { const data = localStorage.getItem('mk_verification_sendoffs'); return data ? JSON.parse(data) : []; },
-  addSendoff: (sendoff: Omit<import('./types').VerificationSendoff, 'id'>): import('./types').VerificationSendoff => { const sendoffs = store.getSendoffs(); const newSendoff = { ...sendoff, id: uuidv4() }; sendoffs.push(newSendoff); localStorage.setItem('mk_verification_sendoffs', JSON.stringify(sendoffs)); return newSendoff; },
-  updateSendoff: (id: string, updates: Partial<import('./types').VerificationSendoff>): import('./types').VerificationSendoff | null => { const sendoffs = store.getSendoffs(); const sendoff = sendoffs.find(s => s.id === id); if (!sendoff) return null; const updated = { ...sendoff, ...updates }; const newSendoffs = sendoffs.map(s => s.id === id ? updated : s); localStorage.setItem('mk_verification_sendoffs', JSON.stringify(newSendoffs)); return updated; },
-  deleteSendoff: (id: string): boolean => { const sendoffs = store.getSendoffs(); const newSendoffs = sendoffs.filter(s => s.id !== id); localStorage.setItem('mk_verification_sendoffs', JSON.stringify(newSendoffs)); return true; },
+  // Все бизнес-данные через адаптер
+  getDepartments: (): Department[] => getAdapter().getDepartments(),
+  addDepartment: (dept: Omit<Department, 'id'>): Department => getAdapter().addDepartment(dept),
+  updateDepartment: (id: string, updates: Partial<Department>) => getAdapter().updateDepartment(id, updates),
+  deleteDepartment: (id: string): { success: boolean; message: string } => getAdapter().deleteDepartment(id),
+  
+  getWarehouses: (): Warehouse[] => getAdapter().getWarehouses(),
+  addWarehouse: (warehouse: Omit<Warehouse, 'id'>): Warehouse => getAdapter().addWarehouse(warehouse),
+  updateWarehouse: (id: string, updates: Partial<Warehouse>) => getAdapter().updateWarehouse(id, updates),
+  deleteWarehouse: (id: string): { success: boolean; message: string } => getAdapter().deleteWarehouse(id),
+  
+  getEmployees: (): Employee[] => getAdapter().getEmployees(),
+  addEmployee: (emp: Omit<Employee, 'id'>): Employee => getAdapter().addEmployee(emp),
+  updateEmployee: (id: string, updates: Partial<Employee>) => getAdapter().updateEmployee(id, updates),
+  deleteEmployee: (id: string) => getAdapter().deleteEmployee(id),
+  
+  getInstruments: (): MeasuringInstrument[] => getAdapter().getInstruments(),
+  addInstrument: (inst: Omit<MeasuringInstrument, 'id'>): MeasuringInstrument => {
+    const instrument = getAdapter().addInstrument(inst);
+    return instrument;
+  },
+  updateInstrument: (id: string, updates: Partial<MeasuringInstrument>) => getAdapter().updateInstrument(id, updates),
+  deleteInstrument: (id: string) => getAdapter().deleteInstrument(id),
+  
+  getIssues: (): IssueRecord[] => getAdapter().getIssues(),
+  addIssue: (issue: Omit<IssueRecord, 'id'>): IssueRecord => getAdapter().addIssue(issue),
+  returnInstrument: (issueId: string, userId: string) => getAdapter().returnInstrument(issueId, userId),
+  
+  getOperations: (): OperationLog[] => getAdapter().getOperations(),
+  addOperation: (op: Omit<OperationLog, 'id' | 'timestamp'>): OperationLog => getAdapter().addOperation(op),
+  
+  getCategories: (): InstrumentCategory[] => getAdapter().getCategories(),
+  addCategory: (category: Omit<InstrumentCategory, 'id' | 'createdAt'>): InstrumentCategory => getAdapter().addCategory(category),
+  updateCategory: (id: string, updates: Partial<Omit<InstrumentCategory, 'id' | 'createdAt'>>) => getAdapter().updateCategory(id, updates),
+  deleteCategory: (id: string): { success: boolean; message: string } => getAdapter().deleteCategory(id),
+  
+  getProtocols: (): VerificationProtocol[] => getAdapter().getProtocols(),
+  addProtocol: (protocol: Omit<VerificationProtocol, 'id' | 'createdAt' | 'updatedAt'>): VerificationProtocol => getAdapter().addProtocol(protocol),
+  updateProtocol: (id: string, updates: Partial<VerificationProtocol>): VerificationProtocol | null => getAdapter().updateProtocol(id, updates),
+  deleteProtocol: (id: string): boolean => getAdapter().deleteProtocol(id),
+  
+  getSendoffs: (): VerificationSendoff[] => getAdapter().getSendoffs(),
+  addSendoff: (sendoff: Omit<VerificationSendoff, 'id'>): VerificationSendoff => getAdapter().addSendoff(sendoff),
+  updateSendoff: (id: string, updates: Partial<VerificationSendoff>): VerificationSendoff | null => getAdapter().updateSendoff(id, updates),
+  deleteSendoff: (id: string): boolean => getAdapter().deleteSendoff(id),
+  
+  getDashboardStats: (): DashboardStats => { 
+    const instruments = getAdapter().getInstruments(); 
+    return { 
+      totalInstruments: instruments.length, 
+      available: instruments.filter(i => i.status === 'available').length, 
+      issued: instruments.filter(i => i.status === 'issued').length, 
+      expiredVerification: instruments.filter(i => isVerificationExpired(i)).length, 
+      verificationDueSoon: instruments.filter(i => isVerificationDueSoon(i)).length, 
+      totalEmployees: getAdapter().getEmployees().length, 
+      totalDepartments: getAdapter().getDepartments().length 
+    }; 
+  },
 };

@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { useNotification } from '../contexts/NotificationContext';
 import { playSuccess, playError } from '../utils/audio';
 import { Database, ArrowRightLeft, Download, Upload, AlertTriangle } from 'lucide-react';
-import { getStorageConfig, getStorageStats } from '../services/storage';
+import { getStorageConfig, getStorageStats, LocalStorageAdapter, PocketBaseAdapter } from '../services/storage';
+import { migrateLocalToPocketBase, migratePocketBaseToLocal, MigrationProgress, MigrationReport } from '../services/storage/migrationService';
 
 interface MigrationPageProps {
   theme: 'dark' | 'light';
@@ -48,18 +49,22 @@ export default function MigrationPage({ theme }: MigrationPageProps) {
     setMigrationProgress({ current: 0, total: 0 });
 
     try {
-      // Здесь будет логика миграции
-      // Для демонстрации просто имитируем процесс
-      const totalItems = stats.local;
-      setMigrationProgress({ current: 0, total: totalItems });
+      const localAdapter = new LocalStorageAdapter();
+      const pocketbaseAdapter = new PocketBaseAdapter(storageConfig.pocketbaseUrl || 'http://127.0.0.1:8090');
 
-      for (let i = 0; i < totalItems; i++) {
-        await new Promise(resolve => setTimeout(resolve, 100)); // Имитация загрузки
-        setMigrationProgress({ current: i + 1, total: totalItems });
-      }
+      const report = await migrateLocalToPocketBase(
+        localAdapter,
+        pocketbaseAdapter,
+        (progress: MigrationProgress) => {
+          setMigrationProgress({ current: progress.current, total: progress.total });
+        }
+      );
 
       playSuccess();
-      notification.success('Миграция завершена', `Перенесено ${totalItems} записей`);
+      notification.success(
+        'Миграция завершена',
+        `Перенесено: ${report.totalMigrated}, Конфликтов: ${report.totalConflicts}`
+      );
       await loadStats();
     } catch (error) {
       playError();
@@ -82,16 +87,22 @@ export default function MigrationPage({ theme }: MigrationPageProps) {
     setMigrationProgress({ current: 0, total: 0 });
 
     try {
-      const totalItems = stats.remote;
-      setMigrationProgress({ current: 0, total: totalItems });
+      const localAdapter = new LocalStorageAdapter();
+      const pocketbaseAdapter = new PocketBaseAdapter(storageConfig.pocketbaseUrl || 'http://127.0.0.1:8090');
 
-      for (let i = 0; i < totalItems; i++) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-        setMigrationProgress({ current: i + 1, total: totalItems });
-      }
+      const report = await migratePocketBaseToLocal(
+        pocketbaseAdapter,
+        localAdapter,
+        (progress: MigrationProgress) => {
+          setMigrationProgress({ current: progress.current, total: progress.total });
+        }
+      );
 
       playSuccess();
-      notification.success('Миграция завершена', `Перенесено ${totalItems} записей`);
+      notification.success(
+        'Миграция завершена',
+        `Перенесено: ${report.totalMigrated}, Конфликтов: ${report.totalConflicts}`
+      );
       await loadStats();
     } catch (error) {
       playError();
