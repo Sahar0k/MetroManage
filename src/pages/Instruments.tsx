@@ -112,8 +112,28 @@ export default function Instruments({ theme, userId, userRole, initialFilter, on
 
   const handleSave = useCallback(() => {
     if (!validateForm()) { playError(); return; }
-    if (editItem) { store.updateInstrument(editItem.id, { ...formData, lastVerificationDate: formData.lastVerificationDate || null, warehouseId: formData.warehouseId || null, photo: formData.photo || undefined, customFields: formData.customFields }); }
-    else { store.addInstrument({ ...formData, lastVerificationDate: formData.lastVerificationDate || null, warehouseId: formData.warehouseId || null, photo: formData.photo || undefined, customFields: formData.customFields }); }
+    const instrumentData: Omit<MeasuringInstrument, 'id'> = {
+      inventoryNumber: formData.inventoryNumber,
+      name: formData.name,
+      category: formData.category,
+      type: formData.type,
+      serialNumber: formData.serialNumber,
+      manufacturer: formData.manufacturer,
+      range: formData.range,
+      accuracy: formData.accuracy,
+      status: formData.status,
+      lastVerificationDate: formData.lastVerificationDate || null,
+      intervalMonths: formData.intervalMonths,
+      nextVerificationDate: null, // Будет рассчитано в адаптере
+      location: formData.location,
+      warehouseId: formData.warehouseId || null,
+      customFields: formData.customFields,
+    };
+    if (formData.photo) {
+      instrumentData.photo = formData.photo;
+    }
+    if (editItem) { store.updateInstrument(editItem.id, instrumentData); }
+    else { store.addInstrument(instrumentData); }
     playSuccess(); refresh(); setShowForm(false); setValidationErrors({});
   }, [formData, editItem, refresh, validateForm]);
 
