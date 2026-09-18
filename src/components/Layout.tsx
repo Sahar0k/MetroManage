@@ -4,7 +4,7 @@ import { User, MeasuringInstrument } from '../types';
 import { getRoleLabel } from '../utils/domain';
 import { unlockAudio } from '../utils/audio';
 import { LayoutDashboard, Wrench, ArrowLeftRight, Users, ScrollText, Radio, LogIn, LogOut, Menu, X, Calendar, Search, Upload, Settings, ClipboardCheck, HardDrive, Server, WifiOff, Database } from 'lucide-react';
-import { getStorageConfig } from '../services/storage';
+import { getStorageConfig, getStorageAdapter } from '../services/storage';
 import SearchContextMenu from './SearchContextMenu';
 import InstrumentDetailModal from './InstrumentDetailModal';
 import InstrumentCard from './InstrumentCard';
@@ -16,8 +16,6 @@ const ALL_NAV_ITEMS = [
   { id: 'dashboard', label: 'Сводка', icon: LayoutDashboard, roles: ['metrologist'] },
   { id: 'instruments', label: 'Реестр СИ', icon: Wrench, roles: ['guest', 'metrologist'] },
   { id: 'verification', label: 'Поверки', icon: Calendar, roles: ['metrologist'] },
-  { id: 'verification-registration', label: 'Регистрация поверок', icon: ClipboardCheck, roles: ['metrologist'] },
-
   { id: 'issue-return', label: 'Выдача / Возврат', icon: ArrowLeftRight, roles: ['metrologist'] },
   { id: 'personnel', label: 'Персонал', icon: Users, roles: ['metrologist'] },
   { id: 'operations', label: 'Журнал', icon: ScrollText, roles: ['metrologist'] },
@@ -94,7 +92,23 @@ export default function Layout({ children, currentPage, onNavigate, onUserChange
   }, [onNavigate, onUserChange]);
 
   const handleSubmitLogin = useCallback((e: React.FormEvent) => { e.preventDefault(); handleLogin(loginForm.username, loginForm.password); }, [handleLogin, loginForm]);
-  const handleLogout = useCallback(() => { store.setCurrentUser(null); setUser(null); onNavigate('instruments'); if (onUserChange) onUserChange(); }, [onNavigate, onUserChange]);
+  const handleLogout = useCallback(() => {
+    // Для серверного режима вызываем adapter.logout()
+    if (storageSource === 'pocketbase') {
+      const adapter = getStorageAdapter();
+      if ('logout' in adapter) {
+        (adapter as any).logout();
+      }
+      // Перезагружаем страницу для возврата на LoginPage
+      window.location.reload();
+    } else {
+      // Локальный режим
+      store.setCurrentUser(null);
+      setUser(null);
+      onNavigate('instruments');
+      if (onUserChange) onUserChange();
+    }
+  }, [onNavigate, onUserChange, storageSource]);
 
   const currentRole = user?.role || 'guest';
   const navItems = useMemo(() => ALL_NAV_ITEMS.filter(item => item.roles.includes(currentRole)), [currentRole]);
@@ -165,21 +179,32 @@ export default function Layout({ children, currentPage, onNavigate, onUserChange
               )}
             </div>
 
-            {user ? (
-              <div className="space-y-2">
-                <div className="px-3 py-2 rounded-lg bg-slate-700/50"><p className="text-sm font-medium">{user.fullName}</p><p className="text-xs text-cyan-500">{getRoleLabel(user.role)}</p></div>
-                <button onClick={handleLogout} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-red-400 hover:bg-red-500/10 transition-colors"><LogOut size={16} />Выйти</button>
-              </div>
+            {storageSource === 'pocketbase' ? (
+              // Серверный режим: показываем только информацию о пользователе и кнопку выхода
+              user ? (
+                <div className="space-y-2">
+                  <div className="px-3 py-2 rounded-lg bg-slate-700/50"><p className="text-sm font-medium">{user.fullName}</p><p className="text-xs text-cyan-500">{getRoleLabel(user.role)}</p></div>
+                  <button onClick={handleLogout} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-red-400 hover:bg-red-500/10 transition-colors"><LogOut size={16} />Выйти</button>
+                </div>
+              ) : null
             ) : (
-              <form onSubmit={handleSubmitLogin} className="space-y-3 px-3">
-                <p className="text-xs text-slate-400">Вход для метролога</p>
-                <input type="text" placeholder="Логин" value={loginForm.username} onChange={(e) => setLoginForm({ ...loginForm, username: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-slate-600 text-white text-sm placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-500" />
-                <input type="password" placeholder="Пароль" value={loginForm.password} onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-slate-600 text-white text-sm placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-500" />
-                {loginError && <p className="text-xs text-red-400">{loginError}</p>}
-                <button type="button" onClick={() => setLoginForm({ username: 'metrologist', password: 'metrolog' })} className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs bg-slate-600 text-slate-300 hover:bg-slate-500">Тестовые данные</button>
-                <button type="submit" className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm bg-cyan-500 text-white hover:bg-cyan-600"><LogIn size={14} />Войти</button>
-                <p className="text-[10px] text-slate-500 text-center">По умолчанию — гость</p>
-              </form>
+              // Локальный режим: показываем форму логина
+              user ? (
+                <div className="space-y-2">
+                  <div className="px-3 py-2 rounded-lg bg-slate-700/50"><p className="text-sm font-medium">{user.fullName}</p><p className="text-xs text-cyan-500">{getRoleLabel(user.role)}</p></div>
+                  <button onClick={handleLogout} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-red-400 hover:bg-red-500/10 transition-colors"><LogOut size={16} />Выйти</button>
+                </div>
+              ) : (
+                <form onSubmit={handleSubmitLogin} className="space-y-3 px-3">
+                  <p className="text-xs text-slate-400">Вход для метролога</p>
+                  <input type="text" placeholder="Логин" value={loginForm.username} onChange={(e) => setLoginForm({ ...loginForm, username: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-slate-600 text-white text-sm placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-500" />
+                  <input type="password" placeholder="Пароль" value={loginForm.password} onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-slate-600 text-white text-sm placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-500" />
+                  {loginError && <p className="text-xs text-red-400">{loginError}</p>}
+                  <button type="button" onClick={() => setLoginForm({ username: 'metrologist', password: 'metrolog' })} className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs bg-slate-600 text-slate-300 hover:bg-slate-500">Тестовые данные</button>
+                  <button type="submit" className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm bg-cyan-500 text-white hover:bg-cyan-600"><LogIn size={14} />Войти</button>
+                  <p className="text-[10px] text-slate-500 text-center">По умолчанию — гость</p>
+                </form>
+              )
             )}
           </div>
         </div>

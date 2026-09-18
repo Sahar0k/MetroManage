@@ -5,11 +5,17 @@ import { PocketBaseAdapter } from '../pocketbaseAdapter';
 import { MeasuringInstrument, Employee, Department } from '../../../types';
 
 // Параметризованные тесты для обоих адаптеров
-describe.each([
+const adapters: Array<[string, () => StorageAdapter]> = [
   ['LocalStorageAdapter', () => new LocalStorageAdapter()],
-  // PocketBaseAdapter тесты отключены, так как требуют реальный сервер
-  // ['PocketBaseAdapter', () => new PocketBaseAdapter('http://localhost:8090')],
-])('StorageAdapter Contract Tests - %s', (adapterName, createAdapter) => {
+];
+
+// Добавляем PocketBaseAdapter только если есть переменная окружения PB_URL
+const pbUrl = import.meta.env.PB_URL as string | undefined;
+if (pbUrl) {
+  adapters.push(['PocketBaseAdapter', () => new PocketBaseAdapter(pbUrl)]);
+}
+
+describe.each(adapters)('StorageAdapter Contract Tests - %s', (adapterName, createAdapter) => {
   let adapter: StorageAdapter;
 
   beforeEach(async () => {
