@@ -10,6 +10,7 @@ import InstrumentDetailModal from '../components/InstrumentDetailModal';
 import FilterBuilder from '../components/FilterBuilder';
 import CategoryBuilder from '../components/CategoryBuilder';
 import ConfirmDialog from '../components/ConfirmDialog';
+import ReturnFromVerificationModal from '../components/ReturnFromVerificationModal';
 import { useGosreestrSearch } from '../hooks/useGosreestrSearch';
 import { fetchCardWithCache, mapToInstrument, downloadAttachment, isGosreestrAccessEnabled } from '../services/gosreestrService';
 import { sendToVerification, getActiveSendoff, getOverdueSendoffs, getSendoffsForInstrument } from '../services/verificationFlowService';
@@ -29,6 +30,7 @@ export default function Instruments({ theme, userId, userRole, initialFilter, on
   const [customFilteredInstruments, setCustomFilteredInstruments] = useState<MeasuringInstrument[] | null>(null);
   const [showCategoryBuilder, setShowCategoryBuilder] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<{ type: 'delete' | 'issue' | 'return'; instrument: MeasuringInstrument } | null>(null);
+  const [showReturnModal, setShowReturnModal] = useState<MeasuringInstrument | null>(null);
   const warehouses = useMemo(() => store.getWarehouses(), []);
   const [formData, setFormData] = useState({ inventoryNumber: '', name: '', category: '', type: '', serialNumber: '', manufacturer: '', range: '', accuracy: '', status: 'available' as MeasuringInstrument['status'], lastVerificationDate: '', intervalMonths: 12, location: '', warehouseId: warehouses[0]?.id || null, photo: '', customFields: {} as Record<string, string | number> });
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
@@ -242,7 +244,7 @@ export default function Instruments({ theme, userId, userRole, initialFilter, on
       <div className={`rounded-xl overflow-hidden border ${isDark ? 'border-slate-700' : 'border-slate-200'}`}>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[800px] text-sm">
-            <thead className={isDark ? 'bg-slate-800' : 'bg-slate-50'}><tr><th className="text-left px-4 py-3 font-medium">Инв. №</th><th className="text-left px-4 py-3 font-medium">Наименование</th><th className="text-left px-4 py-3 font-medium hidden md:table-cell">Тип</th><th className="text-left px-4 py-3 font-medium hidden lg:table-cell">Склад</th><th className="text-left px-4 py-3 font-medium hidden lg:table-cell">След. поверка</th><th className="text-left px-4 py-3 font-medium">Статус</th></tr></thead>
+            <thead className={isDark ? 'bg-slate-800' : 'bg-slate-50'}><tr><th className="text-left px-4 py-3 font-medium">Инв. №</th><th className="text-left px-4 py-3 font-medium">Наименование</th><th className="text-left px-4 py-3 font-medium hidden md:table-cell">Тип</th><th className="text-left px-4 py-3 font-medium hidden lg:table-cell">Склад</th><th className="text-left px-4 py-3 font-medium hidden lg:table-cell">След. поверка</th><th className="text-left px-4 py-3 font-medium">Статус</th><th className="text-left px-4 py-3 font-medium">Действия</th></tr></thead>
             <tbody className={`divide-y ${isDark ? 'divide-slate-700' : 'divide-slate-100'}`}>
               {filtered.map(item => {
                 const activeSendoff = getActiveSendoff(item.id);
@@ -255,6 +257,19 @@ export default function Instruments({ theme, userId, userRole, initialFilter, on
                     <td className="px-4 py-3 hidden lg:table-cell"><span className="text-xs flex items-center gap-1 text-purple-400"><Package size={12} />{warehouses.find(w => w.id === item.warehouseId)?.name || '—'}</span></td>
                     <td className="px-4 py-3 hidden lg:table-cell">{formatDate(item.nextVerificationDate)}</td>
                     <td className="px-4 py-3">{getStatusBadge(item)}</td>
+                    <td className="px-4 py-3">
+                      {item.status === 'verification' && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setShowReturnModal(item);
+                          }}
+                          className="px-3 py-1 bg-emerald-500 text-white rounded-lg text-xs font-medium hover:bg-emerald-600"
+                        >
+                          Вернулся с поверки
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 );
               })}
@@ -382,6 +397,19 @@ export default function Instruments({ theme, userId, userRole, initialFilter, on
       {showCategoryBuilder && <CategoryBuilder onClose={() => { setShowCategoryBuilder(false); refresh(); }} />}
       {selectedInstrument && <InstrumentDetailModal instrument={selectedInstrument} onClose={() => setSelectedInstrument(null)} onEdit={(instrument) => { setSelectedInstrument(null); openEdit(instrument); }} onDelete={(instrument) => setConfirmDialog({ type: 'delete', instrument })} onIssue={(instrument) => setConfirmDialog({ type: 'issue', instrument })} onReturn={(instrument) => setConfirmDialog({ type: 'return', instrument })} onCreateCard={(instrument) => { setSelectedInstrument(null); setCardInstrument(instrument); }} onViewSimilar={(instrument) => setSelectedInstrument(instrument)} />}
       {confirmDialog && <ConfirmDialog type={confirmDialog.type} instrument={confirmDialog.instrument} onConfirm={() => { const instrument = confirmDialog.instrument; if (confirmDialog.type === 'delete') { store.deleteInstrument(instrument.id); store.addOperation({ userId: userId || '', action: 'delete', entityType: 'instrument', entityId: instrument.id, details: `Удаление СИ ${instrument.inventoryNumber}` }); playSuccess(); refresh(); setSelectedInstrument(null); } else if (confirmDialog.type === 'issue' || confirmDialog.type === 'return') { setSelectedInstrument(null); onNavigate?.('issue-return', undefined, instrument.id); } setConfirmDialog(null); }} onCancel={() => setConfirmDialog(null)} />}
+      
+      {showReturnModal && (
+        <ReturnFromVerificationModal
+          instrument={showReturnModal}
+          userId={userId}
+          isDark={isDark}
+          onClose={() => setShowReturnModal(null)}
+          onSuccess={() => {
+            refresh();
+            setShowReturnModal(null);
+          }}
+        />
+      )}
     </div>
   );
 }
