@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useNotification } from '../contexts/NotificationContext';
 import { getStorageAdapter } from '../services/storage';
 import { initStore } from '../store';
@@ -10,7 +9,6 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const navigate = useNavigate();
   const notification = useNotification();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -32,7 +30,8 @@ export default function LoginPage() {
         await initStore();
         
         notification.success('Вход выполнен', 'Добро пожаловать в систему');
-        navigate('/dashboard');
+        // Перезагружаем страницу для повторной инициализации
+        window.location.reload();
       } else {
         setError(result.error || 'Неверные учётные данные');
       }

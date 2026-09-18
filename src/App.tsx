@@ -46,43 +46,53 @@ function AppContent() {
   });
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
+  const [initError, setInitError] = useState<string | null>(null);
   const theme = 'dark';
   const notification = useNotification();
 
-  // Проверка авторизации при запуске
+  // Проверка авторизации и инициализация при запуске
   useEffect(() => {
-    const checkAuth = async () => {
-      const config = getStorageConfig();
-      
-      // Локальный режим не требует авторизации
-      if (config.type === 'local') {
-        setIsAuthenticated(true);
-        setIsInitializing(false);
-        return;
+    const initializeApp = async () => {
+      try {
+        const config = getStorageConfig();
+        
+        // Локальный режим не требует авторизации
+        if (config.type === 'local') {
+          // Инициализируем хранилище
+          await initStore();
+          setIsAuthenticated(true);
+          return;
+        }
+        
+        // Серверный режим требует авторизации
+        const adapter = getStorageAdapter();
+        if ('getCurrentUser' in adapter) {
+          const user = (adapter as any).getCurrentUser();
+          if (user) {
+            // Пользователь авторизован, инициализируем хранилище
+            await initStore();
+            setIsAuthenticated(true);
+          } else {
+            // Пользователь не авторизован - показываем LoginPage
+            setIsAuthenticated(false);
+          }
+        } else {
+          // Адаптер не поддерживает авторизацию, инициализируем
+          await initStore();
+          setIsAuthenticated(true);
+        }
+      } catch (error) {
+        console.error('Failed to initialize app:', error);
+        // В случае ошибки показываем сообщение
+        setInitError(error instanceof Error ? error.message : 'Неизвестная ошибка инициализации');
+        setIsAuthenticated(false);
       }
-      
-      // Серверный режим требует авторизации
-      const adapter = getStorageAdapter();
-      if ('getCurrentUser' in adapter) {
-        const user = (adapter as any).getCurrentUser();
-        setIsAuthenticated(!!user);
-      } else {
-        setIsAuthenticated(true);
-      }
-      setIsInitializing(false);
     };
 
-    checkAuth();
+    initializeApp().finally(() => {
+      setIsInitializing(false);
+    });
   }, []);
-
-  // Инициализация хранилища после авторизации
-  useEffect(() => {
-    if (isAuthenticated && isInitializing) {
-      initStore().catch(err => {
-        console.error('Failed to initialize store:', err);
-      });
-    }
-  }, [isAuthenticated, isInitializing]);
 
   useEffect(() => { document.documentElement.className = 'dark'; }, []);
   useEffect(() => {
@@ -140,6 +150,24 @@ function AppContent() {
     }
   };
 
+  // Показываем ошибку инициализации
+  if (initError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-900 p-4">
+        <div className="max-w-md w-full bg-slate-800 rounded-lg p-6 border border-red-500/30">
+          <h2 className="text-xl font-bold text-red-400 mb-4">Ошибка загрузки приложения</h2>
+          <p className="text-slate-300 mb-4">{initError}</p>
+          <button 
+            onClick={() => window.location.reload()} 
+            className="w-full py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600"
+          >
+            Перезагрузить страницу
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // Показываем LoginPage если не авторизован в серверном режиме
   if (isAuthenticated === false) {
     return (
@@ -151,10 +179,13 @@ function AppContent() {
   }
 
   // Показываем загрузку пока проверяем авторизацию
-  if (isAuthenticated === null) {
+  if (isAuthenticated === null || isInitializing) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-900">
-        <div className="text-white">Загрузка...</div>
+        <div className="text-center">
+          <div className="inline-block w-12 h-12 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+          <p className="text-white text-lg">Загрузка приложения...</p>
+        </div>
       </div>
     );
   }
