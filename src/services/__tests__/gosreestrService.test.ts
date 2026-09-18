@@ -51,6 +51,10 @@ describe('gosreestrService', () => {
         manufacturer: 'ООО Тест',
         intervalMonths: 12,
         status: 'Действует',
+        isActual: true,
+        validTo: null,
+        productionType: 'serial' as const,
+        cardUrl: 'https://fgis.gost.ru/fundmetrology/cm/mits/test-id',
       };
 
       const mapped = mapToInstrument(card);
@@ -70,6 +74,10 @@ describe('gosreestrService', () => {
         manufacturer: 'Тест',
         intervalMonths: null,
         status: 'Действует',
+        isActual: true,
+        validTo: null,
+        productionType: 'serial' as const,
+        cardUrl: 'https://fgis.gost.ru/fundmetrology/cm/mits/test-id',
       };
 
       const mapped = mapToInstrument(card);
@@ -86,18 +94,15 @@ describe('gosreestrService', () => {
 
     it('должен строить правильный запрос для точного номера', async () => {
       const mockResponse = {
-        status: 'success',
-        result: {
-          totalCount: 1,
-          items: [{
-            id: 'test-id',
-            type: 'foei:SI_type',
-            properties: [
-              { name: 'foei:NameSI', type: 'string', value: 'Тест' },
-              { name: 'foei:DesignationSI', type: 'string', value: 'Тест-1' },
-              { name: 'foei:NumberSI', type: 'string', value: '52797-13' },
-              { name: 'foei:ManufacturerTotalSI', type: 'string', value: 'ООО Тест' },
-            ],
+        response: {
+          numFound: 1,
+          docs: [{
+            mit_uuid: 'test-id',
+            title: 'Тест',
+            notation: 'Тест-1',
+            number: '52797-13',
+            manufacturers: 'ООО Тест',
+            is_actual: true,
           }],
         },
       };
@@ -110,7 +115,7 @@ describe('gosreestrService', () => {
       const result = await searchByQuery('52797-13');
 
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('filter%5B0%5D.field=foei%3ANumberSI'),
+        expect.stringContaining('fq=*52797-13*'),
         expect.any(Object)
       );
       expect(result).toHaveLength(1);
@@ -119,18 +124,15 @@ describe('gosreestrService', () => {
 
     it('должен строить текстовый запрос для обычного поиска', async () => {
       const mockResponse = {
-        status: 'success',
-        result: {
-          totalCount: 1,
-          items: [{
-            id: 'test-id',
-            type: 'foei:SI_type',
-            properties: [
-              { name: 'foei:NameSI', type: 'string', value: 'Р2М-18А' },
-              { name: 'foei:DesignationSI', type: 'string', value: 'Р2М-18А' },
-              { name: 'foei:NumberSI', type: 'string', value: '12345-20' },
-              { name: 'foei:ManufacturerTotalSI', type: 'string', value: 'ООО Тест' },
-            ],
+        response: {
+          numFound: 1,
+          docs: [{
+            mit_uuid: 'test-id',
+            title: 'Р2М-18А',
+            notation: 'Р2М-18А',
+            number: '12345-20',
+            manufacturers: 'ООО Тест',
+            is_actual: true,
           }],
         },
       };
@@ -143,7 +145,7 @@ describe('gosreestrService', () => {
       const result = await searchByQuery('Р2М-18А');
 
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('search=%D0%A02%D0%9C-18%D0%90'),
+        expect.stringContaining('fq=*'),
         expect.any(Object)
       );
       expect(result).toHaveLength(1);
@@ -161,20 +163,20 @@ describe('gosreestrService', () => {
   describe('fetchCard', () => {
     it('должен получать полную карточку', async () => {
       const mockResponse = {
-        status: 'success',
-        result: {
-          totalCount: 1,
-          items: [{
-            id: 'test-id',
-            type: 'foei:SI_type',
-            properties: [
-              { name: 'foei:NameSI', type: 'string', value: 'Мультиметр' },
-              { name: 'foei:DesignationSI', type: 'string', value: 'Мультиметр-1' },
-              { name: 'foei:NumberSI', type: 'string', value: '12345-20' },
-              { name: 'foei:ManufacturerTotalSI', type: 'string', value: 'ООО Тест' },
-              { name: 'foei:MPISI', type: 'string', value: '2 года' },
-              { name: 'foei:StatusSI', type: 'string', value: 'Действует' },
-            ],
+        response: {
+          numFound: 1,
+          docs: [{
+            mit_uuid: 'test-id',
+            title: 'Мультиметр',
+            notation: 'Мультиметр-1',
+            number: '12345-20',
+            manufacturers: 'ООО Тест',
+            is_actual: true,
+            valid_to: '2025-12-31',
+            production_type: 1,
+            j_mpis: JSON.stringify([{ mpi: '2 года' }]),
+            j_specifications: JSON.stringify([{ doc_uuid: 'spec-uuid', doc_name: 'Описание типа' }]),
+            j_methods: JSON.stringify([{ doc_uuid: 'method-uuid', doc_name: 'Методика поверки' }]),
           }],
         },
       };
@@ -190,6 +192,8 @@ describe('gosreestrService', () => {
       expect(card?.name).toBe('Мультиметр');
       expect(card?.intervalMonths).toBe(24);
       expect(card?.status).toBe('Действует');
+      expect(card?.isActual).toBe(true);
+      expect(card?.productionType).toBe('serial');
     });
 
     it('должен возвращать null при ошибке', async () => {
