@@ -3,14 +3,21 @@ import { store, scannerStatus } from '../store';
 import { User, MeasuringInstrument } from '../types';
 import { getRoleLabel } from '../utils/domain';
 import { unlockAudio } from '../utils/audio';
-import { LayoutDashboard, Wrench, ArrowLeftRight, Users, ScrollText, Radio, LogIn, LogOut, Menu, X, Calendar, Search, Upload, Settings, ClipboardCheck, HardDrive, Server, WifiOff, Database } from 'lucide-react';
+import { LayoutDashboard, Wrench, ArrowLeftRight, Users, ScrollText, Radio, LogIn, LogOut, Menu, X, Calendar, Search, Upload, Settings, HardDrive, Server, Database } from 'lucide-react';
 import { getStorageConfig, getStorageAdapter } from '../services/storage';
 import SearchContextMenu from './SearchContextMenu';
 import InstrumentDetailModal from './InstrumentDetailModal';
 import InstrumentCard from './InstrumentCard';
 import ConfirmDialog from './ConfirmDialog';
 
-interface LayoutProps { children: React.ReactNode; currentPage: string; onNavigate: (page: string, filter?: string, instrumentId?: string, comment?: string, sendoffId?: string) => void; onUserChange?: () => void; onDataSourceClick?: () => void; }
+interface LayoutProps { 
+  children: React.ReactNode; 
+  currentPage: string; 
+  onNavigate: (page: string, filter?: string, instrumentId?: string) => void; 
+  onUserChange?: () => void; 
+  onDataSourceClick?: () => void;
+  onLogout?: () => void;
+}
 
 const ALL_NAV_ITEMS = [
   { id: 'dashboard', label: 'Сводка', icon: LayoutDashboard, roles: ['metrologist'] },
@@ -25,7 +32,7 @@ const ALL_NAV_ITEMS = [
   { id: 'migration', label: 'Перенос данных', icon: Database, roles: ['metrologist'] },
 ];
 
-export default function Layout({ children, currentPage, onNavigate, onUserChange, onDataSourceClick }: LayoutProps) {
+export default function Layout({ children, currentPage, onNavigate, onUserChange, onDataSourceClick, onLogout }: LayoutProps) {
   const [user, setUser] = useState<User | null>(store.getCurrentUser());
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [scannerOnline, setScannerOnline] = useState(scannerStatus.isOnline());
@@ -92,23 +99,18 @@ export default function Layout({ children, currentPage, onNavigate, onUserChange
   }, [onNavigate, onUserChange]);
 
   const handleSubmitLogin = useCallback((e: React.FormEvent) => { e.preventDefault(); handleLogin(loginForm.username, loginForm.password); }, [handleLogin, loginForm]);
-  const handleLogout = useCallback(() => {
-    // Для серверного режима вызываем adapter.logout()
-    if (storageSource === 'pocketbase') {
-      const adapter = getStorageAdapter();
-      if ('logout' in adapter) {
-        (adapter as any).logout();
-      }
-      // Перезагружаем страницу для возврата на LoginPage
-      window.location.reload();
+  
+  const handleLogoutClick = useCallback(() => {
+    if (onLogout) {
+      onLogout();
     } else {
-      // Локальный режим
+      // Fallback для локального режима
       store.setCurrentUser(null);
       setUser(null);
       onNavigate('instruments');
       if (onUserChange) onUserChange();
     }
-  }, [onNavigate, onUserChange, storageSource]);
+  }, [onLogout, onNavigate, onUserChange]);
 
   const currentRole = user?.role || 'guest';
   const navItems = useMemo(() => ALL_NAV_ITEMS.filter(item => item.roles.includes(currentRole)), [currentRole]);
@@ -127,8 +129,8 @@ export default function Layout({ children, currentPage, onNavigate, onUserChange
                   <button key={instrument.id} onClick={() => handleSearchResultClick(instrument)} className="w-full text-left px-4 py-3 hover:bg-slate-700 border-b border-slate-700 last:border-b-0">
                     <div className="flex items-center justify-between">
                       <div><p className="font-mono text-xs text-cyan-400">{instrument.inventoryNumber}</p><p className="text-sm font-medium text-slate-200">{instrument.name}</p><p className="text-xs text-slate-400">{instrument.category} - {instrument.type}</p></div>
-                      <span className={`text-xs px-2 py-1 rounded ${instrument.status === 'available' ? 'bg-emerald-400/15 text-emerald-300' : instrument.status === 'issued' ? 'bg-cyan-400/15 text-cyan-300' : instrument.status === 'verification' ? 'bg-purple-400/15 text-purple-300' : instrument.status === 'repair' ? 'bg-amber-400/15 text-amber-300' : 'bg-slate-500/15 text-slate-400'}`}>
-                        {instrument.status === 'available' ? 'Доступно' : instrument.status === 'issued' ? 'Выдано' : instrument.status === 'verification' ? 'На поверке' : instrument.status === 'repair' ? 'Ремонт' : 'Списано'}
+                      <span className={`text-xs px-2 py-1 rounded ${instrument.status === 'available' ? 'bg-emerald-400/15 text-emerald-300' : instrument.status === 'issued' ? 'bg-cyan-400/15 text-cyan-300' : instrument.status === 'repair' ? 'bg-amber-400/15 text-amber-300' : instrument.status === 'verification' ? 'bg-purple-400/15 text-purple-300' : 'bg-slate-500/15 text-slate-400'}`}>
+                        {instrument.status === 'available' ? 'Доступно' : instrument.status === 'issued' ? 'Выдано' : instrument.status === 'repair' ? 'Ремонт' : instrument.status === 'verification' ? 'На поверке' : 'Списано'}
                       </span>
                     </div>
                   </button>
@@ -140,7 +142,7 @@ export default function Layout({ children, currentPage, onNavigate, onUserChange
         </div>
       </div>
 
-      <div className="lg:hidden fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-4 h-[72px] bg-slate-800 border-slate-700 border-b">
+      <div className="lg:hidden fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-4 py-4 bg-slate-800 border-slate-700 border-b">
         <button onClick={() => setSidebarOpen(!sidebarOpen)} className="p-2 rounded-lg hover:bg-slate-700/30">{sidebarOpen ? <X size={20} /> : <Menu size={20} />}</button>
         <span className="font-bold text-cyan-500 text-sm">Учёт СИ</span>
       </div>
@@ -184,7 +186,7 @@ export default function Layout({ children, currentPage, onNavigate, onUserChange
               user ? (
                 <div className="space-y-2">
                   <div className="px-3 py-2 rounded-lg bg-slate-700/50"><p className="text-sm font-medium">{user.fullName}</p><p className="text-xs text-cyan-500">{getRoleLabel(user.role)}</p></div>
-                  <button onClick={handleLogout} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-red-400 hover:bg-red-500/10 transition-colors"><LogOut size={16} />Выйти</button>
+                  <button onClick={handleLogoutClick} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-red-400 hover:bg-red-500/10 transition-colors"><LogOut size={16} />Выйти</button>
                 </div>
               ) : null
             ) : (
@@ -192,7 +194,7 @@ export default function Layout({ children, currentPage, onNavigate, onUserChange
               user ? (
                 <div className="space-y-2">
                   <div className="px-3 py-2 rounded-lg bg-slate-700/50"><p className="text-sm font-medium">{user.fullName}</p><p className="text-xs text-cyan-500">{getRoleLabel(user.role)}</p></div>
-                  <button onClick={handleLogout} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-red-400 hover:bg-red-500/10 transition-colors"><LogOut size={16} />Выйти</button>
+                  <button onClick={handleLogoutClick} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-red-400 hover:bg-red-500/10 transition-colors"><LogOut size={16} />Выйти</button>
                 </div>
               ) : (
                 <form onSubmit={handleSubmitLogin} className="space-y-3 px-3">

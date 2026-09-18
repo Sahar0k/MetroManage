@@ -53,8 +53,11 @@ export class PocketBaseAdapter implements StorageAdapter {
   async initStorage(): Promise<void> {
     if (this.initialized) return;
     
+    // Не выбрасываем ошибку при отсутствии авторизации - это нормальная ситуация
+    // Авторизация проверяется отдельно через getCurrentUser()
     if (!this.pb.authStore.isValid) {
-      throw new Error('NotAuthenticated: необходимо войти в систему');
+      // Просто не инициализируем кэш, пока пользователь не войдёт
+      return;
     }
 
     try {

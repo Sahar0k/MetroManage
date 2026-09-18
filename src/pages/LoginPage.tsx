@@ -1,16 +1,17 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useNotification } from '../contexts/NotificationContext';
 import { getStorageAdapter } from '../services/storage';
-import { initStore } from '../store';
 import { LogIn, AlertCircle } from 'lucide-react';
 
-export default function LoginPage() {
+interface LoginPageProps {
+  onLoginSuccess: () => Promise<void>;
+}
+
+export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const navigate = useNavigate();
   const notification = useNotification();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -28,11 +29,8 @@ export default function LoginPage() {
       const result = await (adapter as any).login(email, password);
       
       if (result.success) {
-        // Инициализируем хранилище после успешной авторизации
-        await initStore();
-        
         notification.success('Вход выполнен', 'Добро пожаловать в систему');
-        navigate('/dashboard');
+        await onLoginSuccess();
       } else {
         setError(result.error || 'Неверные учётные данные');
       }
