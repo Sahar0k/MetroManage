@@ -156,9 +156,10 @@ export default function Instruments({ theme, userId, userRole, initialFilter, on
     const { card, fromCache, cacheDate } = await fetchCardWithCache(hintId);
     
     if (card) {
-      if (card.status !== 'Действует') {
+      if (!card.isActual) {
         setGosreestrStatus('invalid');
-        notification.warning('Тип СИ не действует', 'Данные из Госреестра, но тип не является действующим');
+        const validToStr = card.validTo ? ` (действительно до ${formatDate(card.validTo)})` : '';
+        notification.warning('Тип СИ не действует', `Данные из Госреестра, но тип не является действующим${validToStr}`);
       } else {
         setGosreestrStatus('found');
       }
@@ -176,12 +177,17 @@ export default function Instruments({ theme, userId, userRole, initialFilter, on
       setDescriptionLink(card.descriptionLink || null);
       setMethodLink(card.methodLink || null);
       
+      // Формируем детальное сообщение
+      const mpiStr = card.intervalMonths ? `МПИ: ${card.intervalMonths} мес.` : 'МПИ: не указан';
+      const productionTypeStr = card.productionType === 'serial' ? 'Серийное' : card.productionType === 'single' ? 'Единичное' : 'Не указан';
+      const details = `${mpiStr}, ${productionTypeStr}`;
+      
       playSuccess();
       if (fromCache) {
         const dateStr = cacheDate ? new Date(cacheDate).toLocaleDateString('ru-RU') : '';
-        notification.info('Данные из кэша', `Заполнены поля для ${card.name} (кэш от ${dateStr})`);
+        notification.info('Данные из кэша', `${card.name} (${details}, кэш от ${dateStr})`);
       } else {
-        notification.success('Данные из Госреестра', `Заполнены поля для ${card.name}`);
+        notification.success('Данные из Госреестра', `${card.name} (${details})`);
       }
     } else {
       setGosreestrStatus('not_found');
@@ -329,17 +335,31 @@ export default function Instruments({ theme, userId, userRole, initialFilter, on
                   {/* Выпадающий список подсказок */}
                   {showGosreestrHints && hints.length > 0 && (
                     <div className="absolute z-10 w-full mt-1 bg-slate-800 border border-slate-700 rounded-lg shadow-xl max-h-64 overflow-y-auto">
-                      {hints.map(hint => (
-                        <button
-                          key={hint.id}
-                          onClick={() => handleGosreestrSelect(hint.id)}
-                          className="w-full text-left px-4 py-3 hover:bg-slate-700 border-b border-slate-700 last:border-b-0 transition-colors"
-                        >
-                          <div className="text-base font-medium text-white">{hint.designation}</div>
-                          <div className="text-sm text-slate-400">{hint.number} | {hint.manufacturer}</div>
-                          <div className="text-xs text-slate-500 truncate">{hint.name}</div>
-                        </button>
-                      ))}
+                      {hints.map(hint => {
+                        // Заголовок: notation если непустое и != "Обозначение отсутствует", иначе title[..60]
+                        const title = hint.designation && hint.designation !== 'Обозначение отсутствует'
+                          ? hint.designation
+                          : hint.name.substring(0, 60) + (hint.name.length > 60 ? '...' : '');
+                        
+                        return (
+                          <button
+                            key={hint.id}
+                            onClick={() => handleGosreestrSelect(hint.id)}
+                            className="w-full text-left px-4 py-3 hover:bg-slate-700 border-b border-slate-700 last:border-b-0 transition-colors"
+                          >
+                            <div className="text-base font-medium text-white flex items-center gap-2">
+                              {title}
+                              {!hint.isActual && (
+                                <span className="text-xs px-2 py-0.5 rounded bg-amber-500/20 text-amber-400">Не действует</span>
+                              )}
+                            </div>
+                            <div className="text-sm text-slate-400">{hint.number} | {hint.manufacturer}</div>
+                            {hint.designation && hint.designation !== 'Обозначение отсутствует' && (
+                              <div className="text-xs text-slate-500 truncate">{hint.name}</div>
+                            )}
+                          </button>
+                        );
+                      })}
                     </div>
                   )}
                 </div>

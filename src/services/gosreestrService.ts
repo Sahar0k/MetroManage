@@ -1,9 +1,34 @@
 /**
  * Сервис для работы с Госреестром СИ (fgis.gost.ru)
+ * Новый эндпоинт: /cm/xcdb/mit24/list
  * Все запросы через прокси /api/gosreestr
  */
 
 import { indexedDBCache } from './indexedDBCache';
+
+// Базовый URL для API
+const BASE_URL = '/api/gosreestr';
+const LIST_ENDPOINT = '/cm/xcdb/mit24/list';
+const FILES_ENDPOINT = '/files';
+
+// Константы для rate limiting
+const RATE_LIMIT_MS = 1000;
+const RETRY_DELAY_MS = 2000;
+const FETCH_TIMEOUT_MS = 20000;
+
+// Константы для кэша
+const HINTS_TTL = 24 * 60 * 60 * 1000; // 24 часа
+const CARDS_TTL = 7 * 24 * 60 * 60 * 1000; // 7 дней
+const CACHE_SCHEMA_VERSION = 'mit24:'; // Префикс для новой схемы кэша
+
+// Обязательные заголовки для обхода ботозащиты
+const BOT_SAFE_HEADERS = {
+  'Accept': 'application/json,text/plain,*/*',
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  'Referer': 'https://fgis.gost.ru/fundmetrology/cm/mits',
+};
+
+// === ТИПЫ ===
 
 export interface GosreestrHint {
   id: string;
@@ -11,6 +36,7 @@ export interface GosreestrHint {
   designation: string;
   number: string;
   manufacturer: string;
+  isActual: boolean;
 }
 
 export interface GosreestrCard {
@@ -21,68 +47,117 @@ export interface GosreestrCard {
   manufacturer: string;
   intervalMonths: number | null;
   status: string;
+  isActual: boolean;
+  validTo: string | null;
+  productionType: 'serial' | 'single' | 'unknown';
   descriptionLink?: string;
   methodLink?: string;
+  cardUrl: string;
 }
 
-interface APIProperty {
-  name: string;
-  type: string;
-  value: string | string[];
-  link?: string;
-  mime?: string;
+// Типы для ответа API
+interface Mit24Doc {
+  mit_uuid: string;
+  title: string;
+  number: string;
+  notation?: string;
+  manufacturers?: string;
+  is_actual?: boolean;
+  valid_to?: string;
+  production_type?: number;
+  j_mpis?: string;
+  j_methods?: string;
+  j_specifications?: string;
+  j_manufacturers?: string;
+  j_notation?: string;
 }
 
-interface APIItem {
-  id: string;
-  type: string;
-  properties: APIProperty[];
-}
-
-interface APIResponse {
-  status: string;
-  result: {
-    totalCount: number;
-    items: APIItem[];
+interface Mit24Response {
+  response: {
+    numFound: number;
+    docs: Mit24Doc[];
   };
 }
 
-// Rate limiting
-let lastRequestTime = 0;
-const RATE_LIMIT_MS = 1000;
+interface JMPI {
+  mpi?: string;
+  mpi_text?: string;
+}
 
-// Кэш
+interface JSpecification {
+  doc_uuid?: string;
+  doc_name?: string;
+}
+
+interface JMethod {
+  doc_uuid?: string;
+  doc_name?: string;
+}
+
+// === УТИЛИТЫ ===
+
+let lastRequestTime = 0;
+
+// Кэш в памяти
 const hintsCache = new Map<string, { data: GosreestrHint[]; timestamp: number }>();
 const cardsCache = new Map<string, { data: GosreestrCard; timestamp: number }>();
-const HINTS_TTL = 24 * 60 * 60 * 1000; // 24 часа
-const CARDS_TTL = 7 * 24 * 60 * 60 * 1000; // 7 дней
 
 /**
- * Построение параметров запроса для поиска
+ * Экранирование спецсимволов Lucene
  */
-function buildQueryParams(query: string, page: number = 1, pageSize: number = 10): string {
-  const params = new URLSearchParams();
-  params.append('pageNumber', page.toString());
-  params.append('pageSize', pageSize.toString());
-  
-  // Определяем тип поиска
-  const isExactNumber = /^\d{1,5}-\d{2}$/.test(query);
-  
-  if (isExactNumber) {
-    // Точный поиск по номеру в реестре
-    params.append('filter[0].field', 'foei:NumberSI');
-    params.append('filter[0].operator', 'eq');
-    params.append('filter[0].value', query);
-  } else {
-    // Текстовый поиск по наименованию и обозначению
-    params.append('search', query);
-  }
-  
-  return params.toString();
+export function escapeLuceneQuery(query: string): string {
+  // Спецсимволы Lucene: + - && || ! ( ) { } [ ] ^ " * ? : \ /
+  const specialChars = /[+\-&|!(){}[\]^"~*?:\\/]/g;
+  return query.replace(specialChars, '\\$&');
 }
 
 /**
- * Парсинг МПИ из строки
+ * Парсинг JSON-строки с type-guard
+ */
+function parseJsonSafely<T>(jsonString: string | undefined, validator: (data: unknown) => data is T): T | null {
+  if (!jsonString) return null;
+  
+  try {
+    const parsed: unknown = JSON.parse(jsonString);
+    if (validator(parsed)) {
+      return parsed;
+    }
+    return null;
+  } catch (error) {
+    console.error('JSON parse error:', error);
+    return null;
+  }
+}
+
+/**
+ * Type-guard для массива JMPI
+ */
+function isJMPIArray(data: unknown): data is JMPI[] {
+  return Array.isArray(data) && data.every(item => 
+    typeof item === 'object' && item !== null && ('mpi' in item || 'mpi_text' in item)
+  );
+}
+
+/**
+ * Type-guard для массива JSpecification
+ */
+function isJSpecificationArray(data: unknown): data is JSpecification[] {
+  return Array.isArray(data) && data.every(item => 
+    typeof item === 'object' && item !== null && ('doc_uuid' in item || 'doc_name' in item)
+  );
+}
+
+/**
+ * Type-guard для массива JMethod
+ */
+function isJMethodArray(data: unknown): data is JMethod[] {
+  return Array.isArray(data) && data.every(item => 
+    typeof item === 'object' && item !== null && ('doc_uuid' in item || 'doc_name' in item)
+  );
+}
+
+/**
+ * Парсинг МПИ из строки (экспортируется для обратной совместимости)
  */
 export function parseMPI(mpiString: string): number | null {
   if (!mpiString || mpiString.trim() === '') return null;
@@ -101,35 +176,67 @@ export function parseMPI(mpiString: string): number | null {
     return parseInt(monthsMatch[1]);
   }
   
-  // "6 мес" -> 6
-  const shortMonthsMatch = str.match(/(\d+)\s*мес/);
-  if (shortMonthsMatch) {
-    return parseInt(shortMonthsMatch[1]);
+  // Просто число
+  const numberMatch = str.match(/^(\d+)$/);
+  if (numberMatch) {
+    return parseInt(numberMatch[1]);
   }
   
   return null;
 }
 
 /**
- * Извлечение свойства из карточки
+ * Извлечение МПИ из j_mpis
  */
-function getProperty(properties: APIProperty[], name: string): string | null {
-  const prop = properties.find(p => p.name === name);
-  if (!prop) return null;
+function extractMPI(jMpisString: string | undefined): number | null {
+  const jMpis = parseJsonSafely(jMpisString, isJMPIArray);
+  if (!jMpis || jMpis.length === 0) return null;
   
-  if (Array.isArray(prop.value)) {
-    return prop.value[0] || null;
-  }
+  const firstMPI = jMpis[0];
+  const mpiValue = firstMPI.mpi || firstMPI.mpi_text;
   
-  return prop.value || null;
+  if (!mpiValue) return null;
+  
+  return parseMPI(mpiValue);
 }
 
 /**
- * Извлечение ссылки на вложение
+ * Извлечение ссылки на описание из j_specifications
  */
-function getAttachmentLink(properties: APIProperty[], name: string): string | undefined {
-  const prop = properties.find(p => p.name === name && p.link);
-  return prop?.link;
+function extractDescriptionLink(jSpecsString: string | undefined): string | undefined {
+  const jSpecs = parseJsonSafely(jSpecsString, isJSpecificationArray);
+  if (!jSpecs || jSpecs.length === 0) return undefined;
+  
+  const firstSpec = jSpecs[0];
+  if (firstSpec.doc_uuid) {
+    return `${BASE_URL}${FILES_ENDPOINT}/${firstSpec.doc_uuid}`;
+  }
+  
+  return undefined;
+}
+
+/**
+ * Извлечение ссылки на методику из j_methods
+ */
+function extractMethodLink(jMethodsString: string | undefined): string | undefined {
+  const jMethods = parseJsonSafely(jMethodsString, isJMethodArray);
+  if (!jMethods || jMethods.length === 0) return undefined;
+  
+  const firstMethod = jMethods[0];
+  if (firstMethod.doc_uuid) {
+    return `${BASE_URL}${FILES_ENDPOINT}/${firstMethod.doc_uuid}`;
+  }
+  
+  return undefined;
+}
+
+/**
+ * Определение типа производства
+ */
+function parseProductionType(productionType: number | undefined): 'serial' | 'single' | 'unknown' {
+  if (productionType === 1) return 'serial';
+  if (productionType === 2) return 'single';
+  return 'unknown';
 }
 
 /**
@@ -147,6 +254,62 @@ async function waitForRateLimit(): Promise<void> {
 }
 
 /**
+ * Fetch с таймаутом
+ */
+async function fetchWithTimeout(
+  url: string,
+  options: RequestInit = {},
+  timeoutMs: number = FETCH_TIMEOUT_MS
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    return response;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    throw error;
+  }
+}
+
+/**
+ * Построение заголовков для запроса
+ */
+function buildHeaders(additionalHeaders?: Record<string, string>): Record<string, string> {
+  return {
+    ...BOT_SAFE_HEADERS,
+    ...additionalHeaders,
+  };
+}
+
+/**
+ * Обработка ответа с retry на 429
+ */
+async function handleResponseWithRetry<T>(
+  response: Response,
+  parseFn: () => Promise<T>,
+  retryFn: () => Promise<T>
+): Promise<T> {
+  if (response.status === 429) {
+    await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
+    return retryFn();
+  }
+  
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`);
+  }
+  
+  return parseFn();
+}
+
+// === ПУБЛИЧНЫЕ ФУНКЦИИ ===
+
+/**
  * Поиск по запросу
  */
 export async function searchByQuery(
@@ -156,7 +319,8 @@ export async function searchByQuery(
   if (!query || query.length < 3) return [];
   
   // Проверка кэша
-  const cached = hintsCache.get(query);
+  const cacheKey = `${CACHE_SCHEMA_VERSION}search:${query}`;
+  const cached = hintsCache.get(cacheKey);
   if (cached && Date.now() - cached.timestamp < HINTS_TTL) {
     return cached.data;
   }
@@ -164,42 +328,40 @@ export async function searchByQuery(
   try {
     await waitForRateLimit();
     
-    const params = buildQueryParams(query);
-    const response = await fetch(`/api/gosreestr/api/registry/4/data?${params}`, {
-      signal,
-      headers: {
-        'User-Agent': 'Metrolog-Manage/1.0',
-      },
+    const escapedQuery = escapeLuceneQuery(query);
+    const params = new URLSearchParams({
+      fq: `*${escapedQuery}*`,
+      fl: 'title,number,notation,manufacturers,mit_uuid,is_actual',
+      rows: '20',
+      sort: 'num1 desc,num2 desc',
     });
     
-    if (!response.ok) {
-      if (response.status === 429) {
-        // Rate limit exceeded, retry after backoff
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        return searchByQuery(query, signal);
-      }
-      throw new Error(`HTTP ${response.status}`);
-    }
+    const url = `${BASE_URL}${LIST_ENDPOINT}?${params.toString()}`;
     
-    const data: APIResponse = await response.json();
+    const response = await fetchWithTimeout(url, {
+      signal,
+      headers: buildHeaders(),
+    });
     
-    const hints: GosreestrHint[] = data.result.items.map(item => ({
-      id: item.id,
-      name: getProperty(item.properties, 'foei:NameSI') || '',
-      designation: getProperty(item.properties, 'foei:DesignationSI') || '',
-      number: getProperty(item.properties, 'foei:NumberSI') || '',
-      manufacturer: getProperty(item.properties, 'foei:ManufacturerTotalSI') || '',
+    const data: Mit24Response = await handleResponseWithRetry(response, () => response.json(), () => searchByQuery(query, signal));
+    
+    const hints: GosreestrHint[] = data.response.docs.map(doc => ({
+      id: doc.mit_uuid,
+      name: doc.title || '',
+      designation: doc.notation || '',
+      number: doc.number || '',
+      manufacturer: doc.manufacturers || '',
+      isActual: doc.is_actual !== false,
     }));
     
     // Сохраняем в кэш
-    hintsCache.set(query, { data: hints, timestamp: Date.now() });
+    hintsCache.set(cacheKey, { data: hints, timestamp: Date.now() });
     
     return hints;
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
       throw error;
     }
-    // Graceful fallback
     console.error('Gosreestr search error:', error);
     return [];
   }
@@ -213,7 +375,8 @@ export async function fetchCard(
   signal?: AbortSignal
 ): Promise<GosreestrCard | null> {
   // Проверка кэша
-  const cached = cardsCache.get(id);
+  const cacheKey = `${CACHE_SCHEMA_VERSION}card:${id}`;
+  const cached = cardsCache.get(cacheKey);
   if (cached && Date.now() - cached.timestamp < CARDS_TTL) {
     return cached.data;
   }
@@ -221,52 +384,50 @@ export async function fetchCard(
   try {
     await waitForRateLimit();
     
-    const response = await fetch(`/api/gosreestr/api/registry/4/items/${id}/plaindata`, {
-      signal,
-      headers: {
-        'User-Agent': 'Metrolog-Manage/1.0',
-      },
+    const params = new URLSearchParams({
+      fq: `mit_uuid:"${id}"`,
+      rows: '1',
+      fl: '*',
     });
     
-    if (!response.ok) {
-      if (response.status === 429) {
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        return fetchCard(id, signal);
-      }
-      throw new Error(`HTTP ${response.status}`);
+    const url = `${BASE_URL}${LIST_ENDPOINT}?${params.toString()}`;
+    
+    const response = await fetchWithTimeout(url, {
+      signal,
+      headers: buildHeaders(),
+    });
+    
+    const data: Mit24Response = await handleResponseWithRetry(response, () => response.json(), () => fetchCard(id, signal));
+    
+    if (data.response.docs.length === 0) {
+      return null;
     }
     
-    const data: APIResponse = await response.json();
-    const item = data.result.items[0];
+    const doc = data.response.docs[0];
     
-    if (!item) return null;
-    
-    const mpiString = getProperty(item.properties, 'foei:MPISI') || '';
-    const yearString = getProperty(item.properties, 'foei:YearSI') || '';
-    
-    let intervalMonths = parseMPI(mpiString);
-    if (intervalMonths === null && yearString) {
-      const year = parseInt(yearString);
-      if (!isNaN(year)) {
-        const currentYear = new Date().getFullYear();
-        intervalMonths = (currentYear - year) * 12;
-      }
-    }
+    const intervalMonths = extractMPI(doc.j_mpis);
+    const descriptionLink = extractDescriptionLink(doc.j_specifications);
+    const methodLink = extractMethodLink(doc.j_methods);
+    const productionType = parseProductionType(doc.production_type);
     
     const card: GosreestrCard = {
-      id: item.id,
-      name: getProperty(item.properties, 'foei:NameSI') || '',
-      type: getProperty(item.properties, 'foei:DesignationSI') || '',
-      gosreestrNumber: getProperty(item.properties, 'foei:NumberSI') || '',
-      manufacturer: getProperty(item.properties, 'foei:ManufacturerTotalSI') || '',
+      id: doc.mit_uuid,
+      name: doc.title || '',
+      type: doc.notation || '',
+      gosreestrNumber: doc.number || '',
+      manufacturer: doc.manufacturers || '',
       intervalMonths,
-      status: getProperty(item.properties, 'foei:StatusSI') || '',
-      descriptionLink: getAttachmentLink(item.properties, 'foei:DescriptionSI'),
-      methodLink: getAttachmentLink(item.properties, 'foei:MethodVerifSI'),
+      status: doc.is_actual !== false ? 'Действует' : 'Не действует',
+      isActual: doc.is_actual !== false,
+      validTo: doc.valid_to || null,
+      productionType,
+      descriptionLink,
+      methodLink,
+      cardUrl: `https://fgis.gost.ru/fundmetrology/cm/mits/${doc.mit_uuid}`,
     };
     
     // Сохраняем в кэш
-    cardsCache.set(id, { data: card, timestamp: Date.now() });
+    cardsCache.set(cacheKey, { data: card, timestamp: Date.now() });
     
     return card;
   } catch (error) {
@@ -288,11 +449,11 @@ export async function downloadAttachment(
   try {
     await waitForRateLimit();
     
-    const response = await fetch(`/api/gosreestr${link}`, {
+    const url = link.startsWith('http') ? link : `${BASE_URL}${link}`;
+    
+    const response = await fetchWithTimeout(url, {
       signal,
-      headers: {
-        'User-Agent': 'Metrolog-Manage/1.0',
-      },
+      headers: buildHeaders(),
     });
     
     if (!response.ok) {
@@ -334,7 +495,7 @@ export function clearCache(): void {
   cardsCache.clear();
 }
 
-// === Настройка доступа к Госреестру ===
+// === НАСТРОЙКА ДОСТУПА К ГОСРЕЕСТРУ ===
 
 const SETTINGS_KEY = 'gosreestr_access_enabled';
 
@@ -344,7 +505,7 @@ const SETTINGS_KEY = 'gosreestr_access_enabled';
 export async function isGosreestrAccessEnabled(): Promise<boolean> {
   try {
     const enabled = await indexedDBCache.getSetting(SETTINGS_KEY);
-    return enabled !== false; // По умолчанию включено
+    return enabled !== false;
   } catch {
     return true;
   }
@@ -364,7 +525,6 @@ export async function searchByQueryWithCache(
   query: string,
   signal?: AbortSignal
 ): Promise<{ hints: GosreestrHint[]; fromCache: boolean; cacheDate?: number }> {
-  // Проверка настройки доступа
   const accessEnabled = await isGosreestrAccessEnabled();
   
   if (!accessEnabled) {
@@ -372,22 +532,21 @@ export async function searchByQueryWithCache(
   }
 
   try {
-    // Попытка получить из сети
     const hints = await searchByQuery(query, signal);
     
-    // Кэшируем результаты в IndexedDB
     if (hints.length > 0) {
-      await indexedDBCache.cacheCard(`search:${query}`, hints);
+      const cacheKey = `${CACHE_SCHEMA_VERSION}search:${query}`;
+      await indexedDBCache.cacheCard(cacheKey, { data: hints });
     }
     
     return { hints, fromCache: false };
   } catch (error) {
-    // При ошибке сети пытаемся получить из кэша
     try {
-      const cached = await indexedDBCache.getCachedCard(`search:${query}`);
+      const cacheKey = `${CACHE_SCHEMA_VERSION}search:${query}`;
+      const cached = await indexedDBCache.getCachedCard(cacheKey);
       if (cached) {
         return { 
-          hints: cached.data, 
+          hints: cached.data as GosreestrHint[], 
           fromCache: true, 
           cacheDate: cached.timestamp 
         };
@@ -407,13 +566,12 @@ export async function fetchCardWithCache(
   id: string,
   signal?: AbortSignal
 ): Promise<{ card: GosreestrCard | null; fromCache: boolean; cacheDate?: number }> {
-  // Проверка настройки доступа
   const accessEnabled = await isGosreestrAccessEnabled();
   
   if (!accessEnabled) {
-    // Пытаемся получить из кэша
     try {
-      const cached = await indexedDBCache.getCachedCard(id);
+      const cacheKey = `${CACHE_SCHEMA_VERSION}card:${id}`;
+      const cached = await indexedDBCache.getCachedCard(cacheKey);
       if (cached) {
         return { 
           card: cached.data, 
@@ -428,19 +586,18 @@ export async function fetchCardWithCache(
   }
 
   try {
-    // Попытка получить из сети
     const card = await fetchCard(id, signal);
     
-    // Кэшируем в IndexedDB
     if (card) {
-      await indexedDBCache.cacheCard(id, card);
+      const cacheKey = `${CACHE_SCHEMA_VERSION}card:${id}`;
+      await indexedDBCache.cacheCard(cacheKey, card);
     }
     
     return { card, fromCache: false };
   } catch (error) {
-    // При ошибке сети пытаемся получить из кэша
     try {
-      const cached = await indexedDBCache.getCachedCard(id);
+      const cacheKey = `${CACHE_SCHEMA_VERSION}card:${id}`;
+      const cached = await indexedDBCache.getCachedCard(cacheKey);
       if (cached) {
         return { 
           card: cached.data, 
@@ -469,7 +626,7 @@ export async function checkCacheFreshness(
 
   try {
     const staleCards = await indexedDBCache.getStaleCards(30);
-    const limit = Math.min(staleCards.length, 20); // Лимит 20 проверок за старт
+    const limit = Math.min(staleCards.length, 20);
     
     let updated = 0;
     
@@ -477,35 +634,42 @@ export async function checkCacheFreshness(
       const card = staleCards[i];
       
       // Пропускаем поисковые запросы
-      if (card.id.startsWith('search:')) continue;
+      if (card.id.startsWith(`${CACHE_SCHEMA_VERSION}search:`)) continue;
       
       onProgress?.(i + 1, limit);
       
       try {
         await waitForRateLimit();
         
-        const response = await fetch(`/api/gosreestr/api/registry/4/items/${card.id}/plaindata`, {
-          headers: {
-            'User-Agent': 'Metrolog-Manage/1.0',
-          },
+        const params = new URLSearchParams({
+          fq: `mit_uuid:"${card.id.replace(`${CACHE_SCHEMA_VERSION}card:`, '')}"`,
+          rows: '1',
+          fl: 'is_actual,valid_to',
+        });
+        
+        const url = `${BASE_URL}${LIST_ENDPOINT}?${params.toString()}`;
+        
+        const response = await fetchWithTimeout(url, {
+          headers: buildHeaders(),
         });
         
         if (response.ok) {
-          const data = await response.json();
-          const item = data.result.items[0];
+          const data: Mit24Response = await response.json();
           
-          if (item) {
-            // Обновляем только статус
-            const statusProp = item.properties.find((p: any) => p.name === 'foei:StatusSI');
-            if (statusProp) {
-              const updatedCard = { ...card.data, status: statusProp.value };
-              await indexedDBCache.cacheCard(card.id, updatedCard);
-              updated++;
-            }
+          if (data.response.docs.length > 0) {
+            const doc = data.response.docs[0];
+            const updatedCard = { 
+              ...card.data, 
+              status: doc.is_actual !== false ? 'Действует' : 'Не действует',
+              isActual: doc.is_actual !== false,
+              validTo: doc.valid_to || null,
+            };
+            
+            await indexedDBCache.cacheCard(card.id, updatedCard);
+            updated++;
           }
         }
       } catch (error) {
-        // Игнорируем ошибки, продолжаем проверку
         console.error('Freshness check error:', error);
       }
     }

@@ -134,7 +134,14 @@ proxy: {
 }
 ```
 
-Запросы вида `/api/gosreestr/api/registry/4/data` будут проксироваться на `https://fgis.gost.ru/fundmetrology/api/registry/4/data`.
+Запросы вида `/api/gosreestr/cm/xcdb/mit24/list` будут проксироваться на `https://fgis.gost.ru/fundmetrology/cm/xcdb/mit24/list`.
+
+**Важно:** После обновления версии сервиса необходимо очистить кэш nginx:
+```bash
+# Очистка кэша nginx
+docker exec <container_name> rm -rf /var/cache/nginx/gosreestr/*
+docker exec <container_name> nginx -s reload
+```
 
 #### Production (Nginx)
 
