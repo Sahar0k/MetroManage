@@ -2,7 +2,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { User, Department, Employee, MeasuringInstrument, Warehouse, IssueRecord, OperationLog, DashboardStats, InstrumentCategory, VerificationProtocol, VerificationSendoff } from './types';
 import { calculateNextVerification, isVerificationExpired, isVerificationDueSoon } from './utils/domain';
 import { CATEGORY_TEMPLATES } from './utils/customFields';
-import { getStorageAdapter, StorageAdapter } from './services/storage';
+import { getStorageAdapter, getStorageConfig, StorageAdapter } from './services/storage';
 
 let scannerOnline = false;
 let scannerListeners: Array<() => void> = [];
@@ -138,32 +138,58 @@ function getSeedUsers(): User[] {
 async function initializeStore(adapter: StorageAdapter): Promise<void> {
   await adapter.initStorage();
   
-  const storedVersion = localStorage.getItem('mk_data_version');
+  const config = getStorageConfig();
   
-  if (storedVersion !== CURRENT_DATA_VERSION) {
-    const warehouses = getSeedWarehouses();
-    const departments = getSeedDepartments();
+  // Для локального режима: проверяем версию и очищаем при смене
+  if (config.type === 'local') {
+    const storedVersion = localStorage.getItem('mk_data_version');
     
-    warehouses.forEach(w => adapter.addWarehouse(w));
-    departments.forEach(d => adapter.addDepartment(d));
-    getSeedEmployees(departments, warehouses).forEach(e => adapter.addEmployee(e));
-    getSeedInstruments(warehouses).forEach(i => adapter.addInstrument(i));
+    if (storedVersion !== CURRENT_DATA_VERSION) {
+      // Очищаем все ключи mk_* при смене версии
+      Object.keys(localStorage).forEach(key => {
+        if (key.startsWith('mk_') && key !== 'mk_storage_config') {
+          localStorage.removeItem(key);
+        }
+      });
+      
+      // Создаём сид-данные
+      await createSeedData(adapter);
+      
+      localStorage.setItem('mk_data_version', CURRENT_DATA_VERSION);
+    }
+  } else {
+    // Для серверного режима: проверяем наличие данных
+    const instruments = adapter.getInstruments();
+    const warehouses = adapter.getWarehouses();
     
-    // Users остаются в localStorage (не часть бизнес-данных)
-    const users = getSeedUsers();
-    localStorage.setItem('mk_users', JSON.stringify(users));
-    
-    const defaultCategories: InstrumentCategory[] = CATEGORY_TEMPLATES.map((template: { category: string; fields: any[] }) => ({
-      id: uuidv4(),
-      name: template.category,
-      description: `Категория для приборов типа "${template.category}"`,
-      fields: template.fields,
-      createdAt: new Date().toISOString()
-    }));
-    defaultCategories.forEach(c => adapter.addCategory(c));
-    
-    localStorage.setItem('mk_data_version', CURRENT_DATA_VERSION);
+    // Сид создаётся только если база пуста
+    if (instruments.length === 0 && warehouses.length === 0) {
+      await createSeedData(adapter);
+    }
   }
+}
+
+async function createSeedData(adapter: StorageAdapter): Promise<void> {
+  const warehouses = getSeedWarehouses();
+  const departments = getSeedDepartments();
+  
+  warehouses.forEach(w => adapter.addWarehouse(w));
+  departments.forEach(d => adapter.addDepartment(d));
+  getSeedEmployees(departments, warehouses).forEach(e => adapter.addEmployee(e));
+  getSeedInstruments(warehouses).forEach(i => adapter.addInstrument(i));
+  
+  // Users остаются в localStorage (не часть бизнес-данных)
+  const users = getSeedUsers();
+  localStorage.setItem('mk_users', JSON.stringify(users));
+  
+  const defaultCategories: InstrumentCategory[] = CATEGORY_TEMPLATES.map((template: { category: string; fields: any[] }) => ({
+    id: uuidv4(),
+    name: template.category,
+    description: `Категория для приборов типа "${template.category}"`,
+    fields: template.fields,
+    createdAt: new Date().toISOString()
+  }));
+  defaultCategories.forEach(c => adapter.addCategory(c));
 }
 
 let adapter: StorageAdapter | null = null;

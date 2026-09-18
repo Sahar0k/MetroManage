@@ -3,13 +3,14 @@ import Layout from './components/Layout';
 import DataSourceModal from './components/DataSourceModal';
 import { NotificationContainer } from './components/Notification';
 import { NotificationProvider, useNotification } from './contexts/NotificationContext';
-import { store } from './store';
+import { store, initStore } from './store';
 import { unlockAudio } from './utils/audio';
+import { getStorageAdapter, getStorageConfig } from './services/storage';
+import LoginPage from './pages/LoginPage';
 
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Instruments = lazy(() => import('./pages/Instruments'));
 const Verification = lazy(() => import('./pages/Verification'));
-const VerificationRegistration = lazy(() => import('./pages/VerificationRegistration'));
 
 const IssueReturn = lazy(() => import('./pages/IssueReturn'));
 const Personnel = lazy(() => import('./pages/Personnel'));
@@ -43,8 +44,45 @@ function AppContent() {
     const user = store.getCurrentUser();
     return user?.id || null;
   });
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const [isInitializing, setIsInitializing] = useState(true);
   const theme = 'dark';
   const notification = useNotification();
+
+  // Проверка авторизации при запуске
+  useEffect(() => {
+    const checkAuth = async () => {
+      const config = getStorageConfig();
+      
+      // Локальный режим не требует авторизации
+      if (config.type === 'local') {
+        setIsAuthenticated(true);
+        setIsInitializing(false);
+        return;
+      }
+      
+      // Серверный режим требует авторизации
+      const adapter = getStorageAdapter();
+      if ('getCurrentUser' in adapter) {
+        const user = (adapter as any).getCurrentUser();
+        setIsAuthenticated(!!user);
+      } else {
+        setIsAuthenticated(true);
+      }
+      setIsInitializing(false);
+    };
+
+    checkAuth();
+  }, []);
+
+  // Инициализация хранилища после авторизации
+  useEffect(() => {
+    if (isAuthenticated && isInitializing) {
+      initStore().catch(err => {
+        console.error('Failed to initialize store:', err);
+      });
+    }
+  }, [isAuthenticated, isInitializing]);
 
   useEffect(() => { document.documentElement.className = 'dark'; }, []);
   useEffect(() => {
@@ -91,8 +129,6 @@ function AppContent() {
       case 'dashboard': return <Dashboard theme={theme} onNavigate={handleNavigate} />;
       case 'instruments': return <Instruments theme={theme} userId={userId} userRole={userRole} initialFilter={currentFilter} onNavigate={handleNavigate} />;
       case 'verification': return <Verification theme={theme} onNavigate={handleNavigate} />;
-      case 'verification-registration': return <VerificationRegistration theme={theme} userId={userId} prefillInstrumentId={initialInstrumentId} prefillComment={prefillComment} prefillSendoffId={prefillSendoffId} />;
-
       case 'issue-return': return <IssueReturn theme={theme} userId={userId} userRole={userRole} initialInstrumentId={initialInstrumentId} />;
       case 'personnel': return <Personnel theme={theme} userId={userId} userRole={userRole} />;
       case 'operations': return <OperationsLog theme={theme} />;
@@ -103,6 +139,25 @@ function AppContent() {
       default: return <Instruments theme={theme} userId={userId} userRole={userRole} initialFilter={currentFilter} onNavigate={handleNavigate} />;
     }
   };
+
+  // Показываем LoginPage если не авторизован в серверном режиме
+  if (isAuthenticated === false) {
+    return (
+      <>
+        <LoginPage />
+        <NotificationContainer notifications={notification.notifications} onClose={notification.removeNotification} />
+      </>
+    );
+  }
+
+  // Показываем загрузку пока проверяем авторизацию
+  if (isAuthenticated === null) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-900">
+        <div className="text-white">Загрузка...</div>
+      </div>
+    );
+  }
 
   return (
     <>

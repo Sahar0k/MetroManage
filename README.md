@@ -273,9 +273,53 @@ src/services/storage/
 
 ### Тестирование
 
-Контрактные тесты (`src/services/storage/__tests__/adapter.contract.test.ts`) проверяют корректность реализации CRUD-операций для LocalStorageAdapter.
+Контрактные тесты (`src/services/storage/__tests__/adapter.contract.test.ts`) проверяют корректность реализации CRUD-операций для обоих адаптеров.
 
-Запуск тестов:
+**Запуск тестов для LocalStorageAdapter:**
 ```bash
 npm run test
 ```
+
+**Запуск тестов для PocketBaseAdapter:**
+```bash
+# Запустите PocketBase в Docker
+docker compose up pocketbase -d
+
+# Создайте суперпользователя через Admin UI: http://localhost:8090/_/
+
+# Импортируйте схему: Admin UI → Settings → Collections → Import collections → pb_schema.json
+
+# Создайте обычного пользователя для приложения
+
+# Запустите тесты с переменной окружения
+PB_URL=http://localhost:8090 npm run test
+```
+
+### Настройка PocketBase
+
+1. Запустите PocketBase:
+   ```bash
+   docker compose up pocketbase -d
+   ```
+
+2. Откройте Admin UI: http://localhost:8090/_/
+
+3. Создайте суперпользователя (email и пароль)
+
+4. Импортируйте схему базы данных:
+   - Перейдите в Settings → Collections
+   - Нажмите "Import collections"
+   - Загрузите файл `pb_schema.json` из корня репозитория
+
+5. Создайте обычного пользователя для приложения:
+   - Перейдите в Collections → users
+   - Создайте новую запись с email и паролем
+   - Этот пользователь будет использоваться для авторизации в приложении
+
+6. Настройте приложение:
+   - Откройте Настройки → Источник данных
+   - Выберите "Сервер (PocketBase)"
+   - Укажите URL: `http://localhost:8090`
+   - Нажмите "Проверить соединение"
+   - Нажмите "Применить"
+   - Войдите с учётными данными созданного пользователя
