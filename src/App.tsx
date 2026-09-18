@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
+import { useState, useEffect, useCallback, lazy, Suspense, Component, ReactNode } from 'react';
 import Layout from './components/Layout';
 import DataSourceModal from './components/DataSourceModal';
 import { NotificationContainer } from './components/Notification';
@@ -29,70 +29,120 @@ const LoadingSpinner = () => (
   </div>
 );
 
+// Error Boundary для перехвата ошибок рендеринга
+interface ErrorBoundaryProps {
+  children: ReactNode;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
+}
+
+class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error('ErrorBoundary caught an error:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-slate-900 p-4">
+          <div className="max-w-md w-full bg-slate-800 rounded-lg p-6 border border-red-500/30">
+            <h2 className="text-xl font-bold text-red-400 mb-4">Ошибка приложения</h2>
+            <p className="text-slate-300 mb-4">
+              {this.state.error?.message || 'Произошла неизвестная ошибка'}
+            </p>
+            <button
+              onClick={() => window.location.reload()}
+              className="w-full py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors"
+            >
+              Перезагрузить страницу
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
+type BootState = 'checking' | 'ready' | 'login' | 'error';
+
 function AppContent() {
+  const [bootState, setBootState] = useState<BootState>('checking');
+  const [bootError, setBootError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState('dashboard');
   const [currentFilter, setCurrentFilter] = useState<string | undefined>(undefined);
   const [initialInstrumentId, setInitialInstrumentId] = useState<string | null>(null);
-  const [prefillComment, setPrefillComment] = useState<string | null>(null);
-  const [prefillSendoffId, setPrefillSendoffId] = useState<string | null>(null);
   const [showDataSourceModal, setShowDataSourceModal] = useState(false);
-  const [userRole, setUserRole] = useState<'guest' | 'metrologist'>(() => {
-    const user = store.getCurrentUser();
-    return user?.role || 'guest';
-  });
-  const [userId, setUserId] = useState<string | null>(() => {
-    const user = store.getCurrentUser();
-    return user?.id || null;
-  });
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
-  const [isInitializing, setIsInitializing] = useState(true);
-  const [initError, setInitError] = useState<string | null>(null);
+  const [userRole, setUserRole] = useState<'guest' | 'metrologist'>('guest');
+  const [userId, setUserId] = useState<string | null>(null);
   const theme = 'dark';
   const notification = useNotification();
 
-  // Проверка авторизации и инициализация при запуске
-  useEffect(() => {
-    const initializeApp = async () => {
-      try {
-        const config = getStorageConfig();
-        
-        // Локальный режим не требует авторизации
-        if (config.type === 'local') {
-          // Инициализируем хранилище
-          await initStore();
-          setIsAuthenticated(true);
-          return;
-        }
-        
-        // Серверный режим требует авторизации
-        const adapter = getStorageAdapter();
-        if ('getCurrentUser' in adapter) {
-          const user = (adapter as any).getCurrentUser();
-          if (user) {
-            // Пользователь авторизован, инициализируем хранилище
-            await initStore();
-            setIsAuthenticated(true);
-          } else {
-            // Пользователь не авторизован - показываем LoginPage
-            setIsAuthenticated(false);
-          }
-        } else {
-          // Адаптер не поддерживает авторизацию, инициализируем
-          await initStore();
-          setIsAuthenticated(true);
-        }
-      } catch (error) {
-        console.error('Failed to initialize app:', error);
-        // В случае ошибки показываем сообщение
-        setInitError(error instanceof Error ? error.message : 'Неизвестная ошибка инициализации');
-        setIsAuthenticated(false);
-      }
-    };
+  // Единая функция boot для инициализации приложения
+  const boot = useCallback(async () => {
+    setBootState('checking');
+    setBootError(null);
 
-    initializeApp().finally(() => {
-      setIsInitializing(false);
-    });
+    try {
+      const config = getStorageConfig();
+
+      // Локальный режим: сразу инициализируем
+      if (config.type === 'local') {
+        await initStore();
+        setBootState('ready');
+        return;
+      }
+
+      // Серверный режим: проверяем авторизацию
+      const adapter = getStorageAdapter();
+      if ('getCurrentUser' in adapter) {
+        const user = (adapter as any).getCurrentUser();
+        if (user) {
+          // Пользователь авторизован, инициализируем хранилище
+          await initStore();
+          setBootState('ready');
+        } else {
+          // Пользователь не авторизован - показываем LoginPage
+          setBootState('login');
+        }
+      } else {
+        // Адаптер не поддерживает авторизацию, инициализируем
+        await initStore();
+        setBootState('ready');
+      }
+    } catch (error) {
+      console.error('Boot failed:', error);
+      setBootError(error instanceof Error ? error.message : 'Неизвестная ошибка инициализации');
+      setBootState('error');
+    }
   }, []);
+
+  // Запуск boot при монтировании
+  useEffect(() => {
+    boot();
+  }, [boot]);
+
+  // Инициализация пользователя после готовности
+  useEffect(() => {
+    if (bootState === 'ready') {
+      const user = store.getCurrentUser();
+      setUserRole(user?.role || 'guest');
+      setUserId(user?.id || null);
+    }
+  }, [bootState]);
 
   useEffect(() => { document.documentElement.className = 'dark'; }, []);
   useEffect(() => {
@@ -110,12 +160,6 @@ function AppContent() {
   }, []);
 
   useEffect(() => {
-    const user = store.getCurrentUser();
-    setUserRole(user?.role || 'guest');
-    setUserId(user?.id || null);
-  }, [currentPage]);
-
-  useEffect(() => {
     if (userRole === 'guest') { setCurrentPage('instruments'); }
     else if (userRole === 'metrologist' && currentPage === 'instruments') { setCurrentPage('dashboard'); }
   }, [userRole]);
@@ -124,21 +168,36 @@ function AppContent() {
     if (userRole === 'guest' && currentPage !== 'instruments') { setCurrentPage('instruments'); }
   }, [userRole, currentPage]);
 
-  const handleNavigate = useCallback((page: string, filter?: string, instrumentId?: string, comment?: string, sendoffId?: string) => {
+  const handleNavigate = useCallback((page: string, filter?: string, instrumentId?: string) => {
     setCurrentPage(page);
     if (filter !== undefined) setCurrentFilter(filter); else setCurrentFilter(undefined);
     if (instrumentId !== undefined) setInitialInstrumentId(instrumentId); else setInitialInstrumentId(null);
-    if (comment !== undefined) setPrefillComment(comment); else setPrefillComment(null);
-    if (sendoffId !== undefined) setPrefillSendoffId(sendoffId); else setPrefillSendoffId(null);
   }, []);
 
   const handleDataSourceClick = useCallback(() => { setShowDataSourceModal(true); }, []);
+
+  const handleLogout = useCallback(() => {
+    // Сбрасываем boot в 'login' для серверного режима
+    const config = getStorageConfig();
+    if (config.type === 'pocketbase') {
+      const adapter = getStorageAdapter();
+      if ('logout' in adapter) {
+        (adapter as any).logout();
+      }
+      setBootState('login');
+    } else {
+      // Локальный режим
+      store.setCurrentUser(null);
+      handleUserChange();
+    }
+  }, [handleUserChange]);
 
   const renderPage = () => {
     switch (currentPage) {
       case 'dashboard': return <Dashboard theme={theme} onNavigate={handleNavigate} />;
       case 'instruments': return <Instruments theme={theme} userId={userId} userRole={userRole} initialFilter={currentFilter} onNavigate={handleNavigate} />;
       case 'verification': return <Verification theme={theme} onNavigate={handleNavigate} />;
+
       case 'issue-return': return <IssueReturn theme={theme} userId={userId} userRole={userRole} initialInstrumentId={initialInstrumentId} />;
       case 'personnel': return <Personnel theme={theme} userId={userId} userRole={userRole} />;
       case 'operations': return <OperationsLog theme={theme} />;
@@ -150,36 +209,8 @@ function AppContent() {
     }
   };
 
-  // Показываем ошибку инициализации
-  if (initError) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-900 p-4">
-        <div className="max-w-md w-full bg-slate-800 rounded-lg p-6 border border-red-500/30">
-          <h2 className="text-xl font-bold text-red-400 mb-4">Ошибка загрузки приложения</h2>
-          <p className="text-slate-300 mb-4">{initError}</p>
-          <button 
-            onClick={() => window.location.reload()} 
-            className="w-full py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600"
-          >
-            Перезагрузить страницу
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // Показываем LoginPage если не авторизован в серверном режиме
-  if (isAuthenticated === false) {
-    return (
-      <>
-        <LoginPage />
-        <NotificationContainer notifications={notification.notifications} onClose={notification.removeNotification} />
-      </>
-    );
-  }
-
-  // Показываем загрузку пока проверяем авторизацию
-  if (isAuthenticated === null || isInitializing) {
+  // Состояние проверки
+  if (bootState === 'checking') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-900">
         <div className="text-center">
@@ -190,14 +221,52 @@ function AppContent() {
     );
   }
 
+  // Состояние ошибки
+  if (bootState === 'error') {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-900 p-4">
+        <div className="max-w-md w-full bg-slate-800 rounded-lg p-6 border border-red-500/30">
+          <h2 className="text-xl font-bold text-red-400 mb-4">Ошибка загрузки приложения</h2>
+          <p className="text-slate-300 mb-4">{bootError}</p>
+          <button
+            onClick={boot}
+            className="w-full py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors"
+          >
+            Повторить
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Состояние логина
+  if (bootState === 'login') {
+    return (
+      <>
+        <LoginPage onLoginSuccess={async () => {
+          try {
+            await initStore();
+            setBootState('ready');
+          } catch (error) {
+            console.error('Failed to initialize after login:', error);
+            setBootError(error instanceof Error ? error.message : 'Ошибка инициализации после входа');
+            setBootState('error');
+          }
+        }} />
+        <NotificationContainer notifications={notification.notifications} onClose={notification.removeNotification} />
+      </>
+    );
+  }
+
+  // Состояние готовности
   return (
-    <>
-      <Layout currentPage={currentPage} onNavigate={handleNavigate} onUserChange={handleUserChange} onDataSourceClick={handleDataSourceClick}>
+    <ErrorBoundary>
+      <Layout currentPage={currentPage} onNavigate={handleNavigate} onUserChange={handleUserChange} onDataSourceClick={handleDataSourceClick} onLogout={handleLogout}>
         <Suspense fallback={<LoadingSpinner />}>{renderPage()}</Suspense>
       </Layout>
       <DataSourceModal isOpen={showDataSourceModal} onClose={() => setShowDataSourceModal(false)} />
       <NotificationContainer notifications={notification.notifications} onClose={notification.removeNotification} />
-    </>
+    </ErrorBoundary>
   );
 }
 
