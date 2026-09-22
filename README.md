@@ -73,11 +73,11 @@ location /api/gosreestr/ {
 
 ```bash
 # Первый запрос (MISS)
-curl -I http://localhost:8080/api/gosreestr/api/registry/4/data?search=мультиметр
+curl -I http://localhost:8080/api/gosreestr/cm/xcdb/mit24/list?fq=*мультиметр*&rows=5
 # X-Cache-Status: MISS
 
 # Второй запрос (HIT)
-curl -I http://localhost:8080/api/gosreestr/api/registry/4/data?search=мультиметр
+curl -I http://localhost:8080/api/gosreestr/cm/xcdb/mit24/list?fq=*мультиметр*&rows=5
 # X-Cache-Status: HIT
 ```
 
@@ -155,6 +155,10 @@ location /api/gosreestr/ {
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
     
+    # Ботозащита fgis: без этих заголовков — gif-заглушка
+    proxy_set_header User-Agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36";
+    proxy_set_header Referer "https://fgis.gost.ru/fundmetrology/cm/mits";
+    
     # Rate limiting (опционально)
     limit_req zone=api_limit burst=10 nodelay;
 }
@@ -176,9 +180,10 @@ export default async function handler(req, res) {
   const targetUrl = `https://fgis.gost.ru/fundmetrology/${pathArray.join('/')}`;
   
   try {
-    // Whitelist заголовков (не передаём cookie, host и т.д.)
+    // Заголовки ботозащиты fgis.gost.ru (обязательны! без них — gif-заглушка)
     const headers = {
-      'User-Agent': req.headers['user-agent'] || 'Metrolog-Manage/1.0',
+      'User-Agent': req.headers['user-agent'] || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
+      'Referer': 'https://fgis.gost.ru/fundmetrology/cm/mits',
       'Accept': req.headers['accept'] || 'application/json',
     };
     
@@ -207,19 +212,21 @@ export default async function handler(req, res) {
 ### Ограничения API
 
 - **Rate limit**: 1 запрос в секунду (реализовано в gosreestrService.ts)
-- **User-Agent**: `Metrolog-Manage/1.0`
-- **Кэширование**: 
+- **User-Agent**: браузерный (Chrome UA string) — **обязателен** для обхода ботозащиты fgis.gost.ru
+- **Referer**: `https://fgis.gost.ru/fundmetrology/cm/mits` — **обязателен**
+- **Кэширование**:
   - Подсказки поиска: 24 часа
   - Полные карточки: 7 дней
+- **Без UA/Referer**: сервер возвращает GIF-заглушку вместо JSON/PDF
 
 ### Тестирование
 
-Примеры запросов для проверки:
+Поиск работает серверным фильтром `fq` эндпоинта `mit24`. Примеры:
 
-1. **Точный поиск по номеру**: `52797-13` → единственная подсказка
-2. **Текстовый поиск**: `Р2М-18А` → список результатов
+1. **Точный поиск**: `fq=*52797-13*` → одна запись
+2. **Широкий поиск**: `fq=*Р2М*` → список СИ семейства Р2М
 3. **Выбор подсказки** → автозаполнение полей формы
-4. **Скачивание PDF** → кнопки "Описание типа" и "Методика поверки"
+4. **Скачивание PDF** → см. подраздел «PDF-документы Госреестра» ниже
 
 ### Обработка ошибок
 
@@ -238,6 +245,24 @@ export default async function handler(req, res) {
 4. Content-Type должен быть `application/pdf`
 
 Если PDF открывается как текст или повреждён — проверьте, что Vercel-функция использует `Buffer.from(arrayBuffer)` вместо `response.json()`.
+
+### PDF-документы Госреестра
+
+**Обнаружена проблема:** прямой доступ к `/files/{doc_uuid}` возвращает 404.
+
+**Рабочий путь:** документ скачивается через API `/cm/iaux/docs/{doc_uuid}`, который отдаёт JSON:
+```json
+{
+  "title": "Описание типа",
+  "filename": "2018-53450-13.pdf",
+  "mimetype": "application/pdf",
+  "doc": "JVBERi0xLjQK..." (base64)
+}
+```
+
+Клиент преобразует base64 в Blob URL для просмотра/скачивания.
+
+> **Не использовать:** endpoint `/files/{uuid}` — отдаёт 404; endpoint `/cm/xcdb/mit24/file` — SPA-shell.
 
 ---
 
@@ -269,14 +294,13 @@ src/services/storage/
 
 **Статус реализации:**
 - ✅ LocalStorageAdapter — полностью реализован и используется
-- ⚠️ PocketBaseAdapter — базовая структура, требует доработки
+- ✅ PocketBaseAdapter — полностью реализован (in-memory кэш + write-through, login/logout, LoginPage)
 - ✅ MigrationService — сервис миграции между хранилищами
+- Схема коллекции PB: `pb_schema.json`
 
-**Не реализовано для серверного режима:**
-- Полная интеграция с PocketBase API
-- Авторизация пользователей
-- Работа с файлами через PocketBase Files API
-- Синхронизация данных в реальном времени
+**Честно не реализовано:**
+- Вложения протоколов в серверном режиме — клиентский IndexedDB (PB Files API не подключён, NotImplemented)
+- Realtime-синк — в дорожной карте
 
 ### Тестирование
 
