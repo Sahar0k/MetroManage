@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { parseMPI, mapToInstrument, searchByQuery, fetchCard, clearCache } from '../gosreestrService';
+import { parseMPI, mapToInstrument, searchByQuery, fetchCard, downloadAttachment, clearCache } from '../gosreestrService';
 
 // Mock fetch
 const mockFetch = vi.fn();
@@ -273,6 +273,118 @@ describe('gosreestrService', () => {
       expect(card?.intervalMonths).toBeNull();
       expect(card?.descriptionLink).toBeUndefined();
       expect(card?.methodLink).toBeUndefined();
+    });
+  });
+
+/**
+ * Мокаем fetch который возвращает текстовый ответ (как делает реальный /cm/iaux/docs)
+ */
+function fetchJsonOk(textBody: string) {
+  return {
+    ok: true,
+    text: () => Promise.resolve(textBody),
+    headers: new Map([['content-type', 'application/json']]),
+  };
+}
+function fetchHttpError(status: number, body: string) {
+  return {
+    ok: false,
+    status,
+    text: () => Promise.resolve(body),
+    headers: new Map(),
+  };
+}
+
+describe('downloadAttachment', () => {
+    it('должен строго читать поле doc и декодировать base64', async () => {
+      const pdfBytes = new Uint8Array([0x25, 0x50, 0x44, 0x46]); // %PDF
+      const b64 = btoa(String.fromCharCode(...pdfBytes));
+      const jsonResponse = JSON.stringify({
+        title: 'Описание',
+        filename: 'test.pdf',
+        mimetype: 'application/pdf',
+        doc: b64,
+        doc_uuid: 'uuid-1',
+      });
+      mockFetch.mockResolvedValueOnce(fetchJsonOk(jsonResponse));
+
+      const linkWithPrefix = '/api/gosreestr/cm/iaux/docs/test-uuid';
+      const blob = await downloadAttachment(linkWithPrefix);
+
+      expect(blob).not.toBeNull();
+      expect(mockFetch).toHaveBeenCalledWith(
+        '/api/gosreestr/cm/iaux/docs/test-uuid',
+        expect.any(Object)
+      );
+      const data = await blob!.arrayBuffer();
+      expect(data.byteLength).toBe(pdfBytes.length);
+      expect(new Uint8Array(data)[0]).toBe(0x25); // %
+    });
+
+    it('должен правильно декодировать base64 → Blob для PDF с байтами ≥ 0x80', async () => {
+      const buf = new Uint8Array([
+        0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x34, // %PDF-1.4
+        0xa1, 0xb2, 0xc3, 0xd4, 0xe5, 0xf6, // байты >= 0x80
+        0xff, 0xfe, 0xfd, // ещё побольше high-byte
+      ]);
+      const b64 = btoa(String.fromCharCode(...buf));
+      const jsonResponse = JSON.stringify({ doc: b64, mimetype: 'application/pdf' });
+      mockFetch.mockResolvedValueOnce(fetchJsonOk(jsonResponse));
+
+      const link = '/cm/iaux/docs/test-uuid';
+      const blob = await downloadAttachment(link);
+
+      expect(blob).not.toBeNull();
+      const data = await blob!.arrayBuffer();
+      // Размер совпадает — НЕ раздулся через UTF-8
+      expect(data.byteLength).toBe(buf.length);
+      const actual = new Uint8Array(data);
+      for (let i = 0; i < buf.length; i++) {
+        expect(actual[i]).toBe(buf[i]);
+      }
+    });
+
+    it('должен вернуть null когда в ответе нет поля doc (только filename)', async () => {
+      const jsonResponse = JSON.stringify({
+        title: 'Отчёт',
+        filename: '2022-mp53450-13.pdf',
+        mimetype: 'application/pdf',
+        doc_uuid: 'uuid-no-doc',
+      });
+      mockFetch.mockResolvedValueOnce(fetchJsonOk(jsonResponse));
+      const blob = await downloadAttachment('/api/gosreestr/cm/iaux/docs/no-doc');
+      expect(blob).toBeNull();
+    });
+
+    it('должен вернуть null когда HTML вместо JSON', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        text: () => Promise.resolve('<html><body>500 error</body></html>'),
+        headers: new Map(),
+      });
+      const blob = await downloadAttachment('/api/gosreestr/cm/iaux/docs/html-fail');
+      expect(blob).toBeNull();
+    });
+
+    it('должен вернуть null при HTTP ошибки', async () => {
+      mockFetch.mockResolvedValueOnce(fetchHttpError(403, '{"detail":"blocked"}'));
+      const blob = await downloadAttachment('/api/gosreestr/cm/iaux/docs/fail');
+      expect(blob).toBeNull();
+    });
+
+    it('оставлять http-link без изменений', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        text: () => Promise.resolve('{"msg":"ok"}'),
+        headers: new Map(),
+      });
+
+      const blob = await downloadAttachment('https://external.example.com/file.pdf');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://external.example.com/file.pdf',
+        expect.any(Object)
+      );
     });
   });
 });

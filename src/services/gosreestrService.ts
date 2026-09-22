@@ -536,7 +536,36 @@ export async function fetchCard(
 }
 
 /**
- * Скачивание вложения
+ * Валидация base64 перед вызовом atob
+ */
+function isValidBase64(s: string): boolean {
+  return /^[A-Za-z0-9+/]+={0,2}$/.test(s.trim());
+}
+
+/**
+ * Декодирует base64 в Uint8Array.
+ * atob() возвращает строку где каждый символ — один байт исходного файла
+ * (Latin1-диапазон). Так правильно восстанавливаем бинарные данные.
+ */
+function decodeBase64ToBytes(base64: string): Uint8Array {
+  const cleaned = base64.replace(/\s/g, '');
+  if (!isValidBase64(cleaned)) {
+    throw new Error(`Invalid base64: expected only [A-Za-z0-9+/=], got "${cleaned.slice(0, 30)}..."`);
+  }
+  const raw = atob(cleaned);
+  const len = raw.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = raw.charCodeAt(i);
+  }
+  return bytes;
+}
+
+/**
+ * Скачивание вложения из API /cm/iaux/docs/{uuid}
+ * Ожидаемый JSON-ответ:
+ *   { title, filename, mimetype, doc: "JVBERi0x...", doc_uuid }
+ * Строго читаем поле «doc», валидируем как base64 перед atob.
  */
 export async function downloadAttachment(
   link: string,
@@ -545,7 +574,10 @@ export async function downloadAttachment(
   try {
     await waitForRateLimit();
     
-    const url = link.startsWith('http') ? link : `${BASE_URL}${link}`;
+    // Нормализация URL: не дублировать префикс API_BASE (уже встроен в ссылки из fetchCard)
+    const url = link.startsWith('http') || link.startsWith(BASE_URL)
+      ? link
+      : `${BASE_URL}${link}`;
     
     const response = await fetchWithTimeout(url, {
       signal,
@@ -553,10 +585,47 @@ export async function downloadAttachment(
     });
     
     if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
+      const textFallback = await response.text();
+      const snippet = textFallback.slice(0, 120).replace(/[\x00-\x1f]/g, '');
+      console.error(`iaux docs HTTP ${response.status}: ${snippet}`);
+      return null;
     }
     
-    return await response.blob();
+    // Считываем тело как строку один раз
+    const text = await response.text();
+    
+    // Попытка распарсить JSON строго для поля «doc»
+    if (text.trimStart().startsWith('{')) {
+      let j: Record<string, unknown>;
+      try {
+        j = JSON.parse(text) as Record<string, unknown>;
+      } catch {
+        console.error('iaux docs: JSON parse failed, first 120 chars:', text.slice(0, 120));
+        return null;
+      }
+      
+      const b64 = j?.doc;
+      if (typeof b64 !== 'string' || b64.length === 0) {
+        const keys = Object.keys(j);
+        console.error(`iaux docs: field "doc" missing or not string; available keys=${keys}`);
+        return null;
+      }
+      
+      try {
+        const bytes = decodeBase64ToBytes(b64);
+        const mime = guessContentTypeFromJson(b64, j.mimetype as string | undefined);
+        return new Blob([bytes], { type: mime });
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error(`iaux docs: base64 decode failed [${msg}]`);
+        return null;
+      }
+    }
+    
+    // Не-JWT тело — показываем первые 120 символов и отказываемся
+    const bodySnippet = text.slice(0, 120).replace(/[\x00-\x1f]/g, '');
+    console.error(`iaux docs: expected JSON but got: ${bodySnippet}`);
+    return null;
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
       throw error;
@@ -564,6 +633,17 @@ export async function downloadAttachment(
     console.error('Gosreestr download error:', error);
     return null;
   }
+}
+
+/**
+ * Определяет MIME-тип для Blob: сначала из JSON-поля mimetype,
+ * потом по preamble base64 (e.g. "JVBERi0" → PDF).
+ */
+function guessContentTypeFromJson(base64: string, jsonMime?: string | undefined): string {
+  if (typeof jsonMime === 'string' && jsonMime) return jsonMime;
+  const p = base64.replace(/\s/g, '').slice(0, 10);
+  if (/^JVBERi0/.test(p)) return 'application/pdf';
+  return 'application/octet-stream';
 }
 
 /**
