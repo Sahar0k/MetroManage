@@ -112,7 +112,36 @@ export function escapeLuceneQuery(query: string): string {
 }
 
 /**
- * Парсинг JSON-строки с type-guard
+ * Универсальный парсер j_* полей: принимает string|array|object|null → всегда массив
+ */
+function parseJField<T>(raw: unknown, itemValidator?: (item: unknown) => boolean): T[] {
+  // Если уже массив — вернуть как есть (type-guard не применим)
+  if (Array.isArray(raw)) return raw as T[];
+  
+  // Если object — обёрнуть в массив
+  if (typeof raw === 'object' && raw !== null && !Array.isArray(raw)) return [raw as T];
+  
+  // Если null/undefined — пустой массив
+  if (raw == null) return [];
+  
+  // Строка — попытаться распарсить JSON
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      // Рекурсивно обработаем результат
+      return parseJField<T>(parsed, itemValidator);
+    } catch {
+      // Малий JSON — вернём пустой массив
+      return [];
+    }
+  }
+  
+  // Всё остальное — пустой массив
+  return [];
+}
+
+/**
+ * Парсинг JSON-строки с type-guard (сохранён для обратной совместимости)
  */
 function parseJsonSafely<T>(jsonString: string | undefined, validator: (data: unknown) => data is T): T | null {
   if (!jsonString) return null;
@@ -186,16 +215,16 @@ export function parseMPI(mpiString: string): number | null {
 }
 
 /**
- * Извлечение МПИ из j_mpis
+ * Извлечение МПИ из j_mpis (устойчивый к любому типу входных данных)
  */
-function extractMPI(jMpisString: string | undefined): number | null {
-  const jMpis = parseJsonSafely(jMpisString, isJMPIArray);
-  if (!jMpis || jMpis.length === 0) return null;
+function extractMPI(jMpisRaw: string | undefined): number | null {
+  const jMpis = parseJField<{ mpi?: unknown; mpi_text?: unknown }>(jMpisRaw);
+  if (jMpis.length === 0) return null;
   
-  const firstMPI = jMpis[0];
-  const mpiValue = firstMPI.mpi || firstMPI.mpi_text;
+  const firstItem = jMpis[0];
+  const mpiValue = firstItem.mpi ?? firstItem.mpi_text;
   
-  if (!mpiValue) return null;
+  if (typeof mpiValue !== 'string') return null;
   
   return parseMPI(mpiValue);
 }
@@ -203,12 +232,12 @@ function extractMPI(jMpisString: string | undefined): number | null {
 /**
  * Извлечение ссылки на описание из j_specifications
  */
-function extractDescriptionLink(jSpecsString: string | undefined): string | undefined {
-  const jSpecs = parseJsonSafely(jSpecsString, isJSpecificationArray);
-  if (!jSpecs || jSpecs.length === 0) return undefined;
+function extractDescriptionLink(jSpecsRaw: string | undefined): string | undefined {
+  const jSpecs = parseJField<{ doc_uuid?: unknown; doc_name?: string }>(jSpecsRaw);
+  if (jSpecs.length === 0) return undefined;
   
   const firstSpec = jSpecs[0];
-  if (firstSpec.doc_uuid) {
+  if (typeof firstSpec.doc_uuid === 'string' && firstSpec.doc_uuid) {
     return `${BASE_URL}${DOCS_API_ENDPOINT}/${firstSpec.doc_uuid}`;
   }
   
@@ -218,12 +247,12 @@ function extractDescriptionLink(jSpecsString: string | undefined): string | unde
 /**
  * Извлечение ссылки на методику из j_methods
  */
-function extractMethodLink(jMethodsString: string | undefined): string | undefined {
-  const jMethods = parseJsonSafely(jMethodsString, isJMethodArray);
-  if (!jMethods || jMethods.length === 0) return undefined;
+function extractMethodLink(jMethodsRaw: string | undefined): string | undefined {
+  const jMethods = parseJField<{ doc_uuid?: unknown; doc_name?: string }>(jMethodsRaw);
+  if (jMethods.length === 0) return undefined;
   
   const firstMethod = jMethods[0];
-  if (firstMethod.doc_uuid) {
+  if (typeof firstMethod.doc_uuid === 'string' && firstMethod.doc_uuid) {
     return `${BASE_URL}${DOCS_API_ENDPOINT}/${firstMethod.doc_uuid}`;
   }
   
@@ -288,13 +317,45 @@ function buildHeaders(additionalHeaders?: Record<string, string>): Record<string
 }
 
 /**
- * Обработка ответа с retry на 429
+ * Parse JSON safely with typed validation
+ */
+async function safeJsonParse<T>(response: Response, validator?: (data: unknown) => data is T): Promise<T> {
+  const text = await response.text();
+  try {
+    const parsed: unknown = JSON.parse(text);
+    if (validator) {
+      if (validator(parsed)) return parsed;
+      throw new Error(`Parsed JSON does not match expected shape`);
+    }
+    return parsed as T;
+  } catch (error) {
+    if (error instanceof SyntaxError || error instanceof TypeError) {
+      // Truncated or malformed response - might be transient
+      throw Object.assign(new JsonParseError('Failed to parse JSON response'), { rawPreview: text.slice(0, 200) });
+    }
+    throw error;
+  }
+}
+
+class JsonParseError extends Error {
+  readonly name = 'JsonParseError';
+  readonly rawPreview: string;
+  constructor(message: string, options?: { rawPreview: string }) {
+    super(message);
+    this.rawPreview = options?.rawPreview || '';
+  }
+}
+
+/**
+ * Обработка ответа с retry на 429 и transient errors (JSON parse)
  */
 async function handleResponseWithRetry<T>(
   response: Response,
   parseFn: () => Promise<T>,
-  retryFn: () => Promise<T>
+  retryFn: () => Promise<T>,
+  retries: number = 1
 ): Promise<T> {
+  // Retry на 429 (rate limit)
   if (response.status === 429) {
     await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
     return retryFn();
@@ -304,7 +365,16 @@ async function handleResponseWithRetry<T>(
     throw new Error(`HTTP ${response.status}`);
   }
   
-  return parseFn();
+  try {
+    return await parseFn();
+  } catch (error) {
+    // Retry на JsonParseError (transient - возможно truncated response)
+    if ((error instanceof Error && error.name === 'JsonParseError') && retries > 0) {
+      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
+      return handleResponseWithRetry(response, parseFn, retryFn, retries - 1);
+    }
+    throw error;
+  }
 }
 
 // === ПУБЛИЧНЫЕ ФУНКЦИИ ===
@@ -338,12 +408,20 @@ export async function searchByQuery(
     
     const url = `${BASE_URL}${LIST_ENDPOINT}?${params.toString()}`;
     
-    const response = await fetchWithTimeout(url, {
+    let response = await fetchWithTimeout(url, {
       signal,
       headers: buildHeaders(),
     });
     
-    const data: Mit24Response = await handleResponseWithRetry(response, () => response.json(), () => searchByQuery(query, signal));
+    // Retry on 429 rate limit
+    if (response.status === 429) {
+      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
+      response = await fetchWithTimeout(url, { signal, headers: buildHeaders() });
+    }
+    
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    
+    const data: Mit24Response = await safeJsonParse<Mit24Response>(response);
     
     const hints: GosreestrHint[] = data.response.docs.map(doc => ({
       id: doc.mit_uuid,
@@ -397,9 +475,26 @@ export async function fetchCard(
       headers: buildHeaders(),
     });
     
-    const data: Mit24Response = await handleResponseWithRetry(response, () => response.json(), () => fetchCard(id, signal));
+    let data: Mit24Response;
+    try {
+      data = await safeJsonParse<Mit24Response>(response);
+    } catch (parseErr) {
+      const errDetail = parseErr instanceof Error ? parseErr.message : String(parseErr);
+      console.error(`fetchCard(${id}): parse failed [${errDetail}]`);
+      // Retry once for transient JSON parse error
+      try {
+        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
+        const resp2 = await fetchWithTimeout(url, { signal, headers: buildHeaders() });
+        data = await safeJsonParse<Mit24Response>(resp2);
+      } catch (retryErr) {
+        const retryDetail = retryErr instanceof Error ? retryErr.message : String(retryErr);
+        console.error(`fetchCard(${id}): retry failed [${retryDetail}]`);
+        return null;
+      }
+    }
     
     if (data.response.docs.length === 0) {
+      console.warn(`fetchCard(${id}): API returned 0 docs (query: mit_uuid:"${id}")`);
       return null;
     }
     
@@ -434,7 +529,8 @@ export async function fetchCard(
     if (error instanceof Error && error.name === 'AbortError') {
       throw error;
     }
-    console.error('Gosreestr fetch card error:', error);
+    const errMsg = error instanceof Error ? error.message : String(error);
+    console.error(`fetchCard(${id}): FAILED [${errMsg}]`);
     return null;
   }
 }
@@ -566,27 +662,32 @@ export async function fetchCardWithCache(
   id: string,
   signal?: AbortSignal
 ): Promise<{ card: GosreestrCard | null; fromCache: boolean; cacheDate?: number }> {
+  console.debug(`fetchCardWithCache(${id}): started`);
   const accessEnabled = await isGosreestrAccessEnabled();
+  console.debug(`fetchCardWithCache(${id}): accessEnabled=${accessEnabled}`);
   
   if (!accessEnabled) {
     try {
       const cacheKey = `${CACHE_SCHEMA_VERSION}card:${id}`;
       const cached = await indexedDBCache.getCachedCard(cacheKey);
       if (cached) {
+        console.debug(`fetchCardWithCache(${id}): returned from IndexedDB cache`);
         return { 
           card: cached.data, 
           fromCache: true, 
           cacheDate: cached.timestamp 
         };
       }
-    } catch {
-      // Игнорируем ошибки кэша
+      console.debug(`fetchCardWithCache(${id}): no local cache, access disabled`);
+    } catch (cacheErr) {
+      console.error(`fetchCardWithCache(${id}): IndexedDB error [${cacheErr}]`);
     }
     return { card: null, fromCache: false };
   }
 
   try {
     const card = await fetchCard(id, signal);
+    console.debug(`fetchCardWithCache(${id}): fetchCard returned ${card ? 'card' : 'null'}`);
     
     if (card) {
       const cacheKey = `${CACHE_SCHEMA_VERSION}card:${id}`;
@@ -595,20 +696,23 @@ export async function fetchCardWithCache(
     
     return { card, fromCache: false };
   } catch (error) {
+    console.debug(`fetchCardWithCache(${id}): main fetch failed, trying IndexedDB fallback`);
     try {
       const cacheKey = `${CACHE_SCHEMA_VERSION}card:${id}`;
       const cached = await indexedDBCache.getCachedCard(cacheKey);
       if (cached) {
+        console.debug(`fetchCardWithCache(${id}): returned from IndexedDB fallback cache`);
         return { 
           card: cached.data, 
           fromCache: true, 
           cacheDate: cached.timestamp 
         };
       }
-    } catch {
-      // Игнорируем ошибки кэша
+    } catch (cacheErr) {
+      console.error(`fetchCardWithCache(${id}): IndexedDB fallback error [${cacheErr}]`);
     }
     
+    console.warn(`fetchCardWithCache(${id}): ALL ATTEMPTS FAILED - returning null`);
     return { card: null, fromCache: false };
   }
 }

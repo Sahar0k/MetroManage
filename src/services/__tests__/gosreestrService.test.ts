@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { parseMPI, mapToInstrument, searchByQuery, fetchCard } from '../gosreestrService';
+import { parseMPI, mapToInstrument, searchByQuery, fetchCard, clearCache } from '../gosreestrService';
 
 // Mock fetch
 const mockFetch = vi.fn();
@@ -8,11 +8,13 @@ vi.stubGlobal('fetch', mockFetch);
 describe('gosreestrService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.useFakeTimers();
+    // Очищаем in-memory кэши между тестами
+    clearCache();
+    // Не используем fake timers — они ломают rate-limit retry delays
   });
 
   afterEach(() => {
-    vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
   describe('parseMPI', () => {
@@ -109,13 +111,15 @@ describe('gosreestrService', () => {
 
       mockFetch.mockResolvedValueOnce({
         ok: true,
+        text: () => Promise.resolve(JSON.stringify(mockResponse)),
         json: () => Promise.resolve(mockResponse),
       });
 
       const result = await searchByQuery('52797-13');
 
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('fq=*52797-13*'),
+        // `-` экранируется escapeLuceneQuery -> `\-`
+        expect.stringContaining('fq=*52797%5C-13*'),
         expect.any(Object)
       );
       expect(result).toHaveLength(1);
@@ -139,6 +143,7 @@ describe('gosreestrService', () => {
 
       mockFetch.mockResolvedValueOnce({
         ok: true,
+        text: () => Promise.resolve(JSON.stringify(mockResponse)),
         json: () => Promise.resolve(mockResponse),
       });
 
@@ -152,6 +157,7 @@ describe('gosreestrService', () => {
     });
 
     it('должен возвращать пустой массив при сетевой ошибке', async () => {
+      // fetch reject происходит ДО text(), так что .text() не нужен
       mockFetch.mockRejectedValueOnce(new Error('Network error'));
 
       const result = await searchByQuery('тест');
@@ -183,6 +189,7 @@ describe('gosreestrService', () => {
 
       mockFetch.mockResolvedValueOnce({
         ok: true,
+        text: () => Promise.resolve(JSON.stringify(mockResponse)),
         json: () => Promise.resolve(mockResponse),
       });
 
@@ -202,6 +209,70 @@ describe('gosreestrService', () => {
       const card = await fetchCard('test-id');
 
       expect(card).toBeNull();
+    });
+
+    it('должен устойчиво обрабатывать j_mpis как массив (не строка)', async () => {
+      // Госреестр может прислать j_mpis уже распарсенным массивом, а не JSON-строкой
+      const mockResponse = {
+        response: {
+          numFound: 1,
+          docs: [{
+            mit_uuid: 'test-id-array',
+            title: 'Тест',
+            notation: 'Тест',
+            number: '12345-20',
+            manufacturers: 'Тест',
+            is_actual: true,
+            production_type: 1,
+            // Массив вместо строки — это и вызывало mpiString.trim()
+            j_mpis: [{ mpi: '1 год' }],
+            j_specifications: [],
+            j_methods: [],
+          }],
+        },
+      };
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        text: () => Promise.resolve(JSON.stringify(mockResponse)),
+        json: () => Promise.resolve(mockResponse),
+      });
+
+      const card = await fetchCard('test-id-array');
+
+      expect(card).not.toBeNull();
+      expect(card?.intervalMonths).toBe(12);
+    });
+
+    it('должен устойчиво обрабатывать j_* поля как undefined/null', async () => {
+      const mockResponse = {
+        response: {
+          numFound: 1,
+          docs: [{
+            mit_uuid: 'test-id-null',
+            title: 'Тест',
+            notation: 'Тест',
+            number: '12345-20',
+            manufacturers: 'Тест',
+            is_actual: true,
+            production_type: 1,
+            // Все j_* поля отсутствуют
+          }],
+        },
+      };
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        text: () => Promise.resolve(JSON.stringify(mockResponse)),
+        json: () => Promise.resolve(mockResponse),
+      });
+
+      const card = await fetchCard('test-id-null');
+
+      expect(card).not.toBeNull();
+      expect(card?.intervalMonths).toBeNull();
+      expect(card?.descriptionLink).toBeUndefined();
+      expect(card?.methodLink).toBeUndefined();
     });
   });
 });

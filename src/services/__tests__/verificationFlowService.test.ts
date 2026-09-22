@@ -115,7 +115,7 @@ describe('verificationFlowService', () => {
       );
 
       expect(result.success).toBe(false);
-      expect(result.message).toContain('нельзя отправить');
+      expect(result.message).toContain('Нельзя отправить на поверку: прибор в статусе');
     });
 
     it('должен отказывать если уже есть активная отправка', () => {
@@ -138,7 +138,7 @@ describe('verificationFlowService', () => {
       );
 
       expect(result.success).toBe(false);
-      expect(result.message).toContain('уже отправлен');
+      expect(result.message).toContain('прибор в статусе "verification"');
     });
   });
 
