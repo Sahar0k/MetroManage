@@ -1,0 +1,482 @@
+[
+  {
+    "name": "instruments",
+    "type": "base",
+    "system": false,
+    "schema": [
+      {
+        "name": "inventoryNumber",
+        "type": "text",
+        "required": true,
+        "unique": true
+      },
+      {
+        "name": "name",
+        "type": "text",
+        "required": true
+      },
+      {
+        "name": "category",
+        "type": "text",
+        "required": true
+      },
+      {
+        "name": "type",
+        "type": "text",
+        "required": true
+      },
+      {
+        "name": "serialNumber",
+        "type": "text",
+        "required": true
+      },
+      {
+        "name": "manufacturer",
+        "type": "text",
+        "required": true
+      },
+      {
+        "name": "range",
+        "type": "text",
+        "required": true
+      },
+      {
+        "name": "accuracy",
+        "type": "text",
+        "required": true
+      },
+      {
+        "name": "status",
+        "type": "select",
+        "required": true,
+        "options": {
+          "values": ["available", "issued", "repair", "decommissioned", "verification"],
+          "maxSelect": 1
+        }
+      },
+      {
+        "name": "lastVerificationDate",
+        "type": "date",
+        "required": false
+      },
+      {
+        "name": "intervalMonths",
+        "type": "number",
+        "required": true
+      },
+      {
+        "name": "nextVerificationDate",
+        "type": "date",
+        "required": false
+      },
+      {
+        "name": "location",
+        "type": "text",
+        "required": true
+      },
+      {
+        "name": "warehouseId",
+        "type": "text",
+        "required": false
+      },
+      {
+        "name": "photo",
+        "type": "file",
+        "required": false,
+        "options": {
+          "maxSelect": 1,
+          "maxSize": 5242880,
+          "mimeTypes": ["image/jpeg", "image/png", "image/gif"]
+        }
+      },
+      {
+        "name": "customFields",
+        "type": "json",
+        "required": false
+      }
+    ],
+    "indexes": [
+      "CREATE INDEX idx_inventory_number ON instruments (inventoryNumber)",
+      "CREATE INDEX idx_status ON instruments (status)",
+      "CREATE INDEX idx_category ON instruments (category)"
+    ],
+    "listRule": "@request.auth.id != ''",
+    "viewRule": "@request.auth.id != ''",
+    "createRule": "@request.auth.id != ''",
+    "updateRule": "@request.auth.id != ''",
+    "deleteRule": "@request.auth.id != ''"
+  },
+  {
+    "name": "employees",
+    "type": "base",
+    "system": false,
+    "schema": [
+      {
+        "name": "fullName",
+        "type": "text",
+        "required": true
+      },
+      {
+        "name": "tabNumber",
+        "type": "text",
+        "required": true,
+        "unique": true
+      },
+      {
+        "name": "departmentId",
+        "type": "text",
+        "required": true
+      },
+      {
+        "name": "comment",
+        "type": "text",
+        "required": false
+      },
+      {
+        "name": "warehouseId",
+        "type": "text",
+        "required": false
+      }
+    ],
+    "listRule": "@request.auth.id != ''",
+    "viewRule": "@request.auth.id != ''",
+    "createRule": "@request.auth.id != ''",
+    "updateRule": "@request.auth.id != ''",
+    "deleteRule": "@request.auth.id != ''"
+  },
+  {
+    "name": "departments",
+    "type": "base",
+    "system": false,
+    "schema": [
+      {
+        "name": "name",
+        "type": "text",
+        "required": true
+      },
+      {
+        "name": "code",
+        "type": "text",
+        "required": true,
+        "unique": true
+      }
+    ],
+    "listRule": "@request.auth.id != ''",
+    "viewRule": "@request.auth.id != ''",
+    "createRule": "@request.auth.id != ''",
+    "updateRule": "@request.auth.id != ''",
+    "deleteRule": "@request.auth.id != ''"
+  },
+  {
+    "name": "warehouses",
+    "type": "base",
+    "system": false,
+    "schema": [
+      {
+        "name": "name",
+        "type": "text",
+        "required": true
+      },
+      {
+        "name": "location",
+        "type": "text",
+        "required": true
+      }
+    ],
+    "listRule": "@request.auth.id != ''",
+    "viewRule": "@request.auth.id != ''",
+    "createRule": "@request.auth.id != ''",
+    "updateRule": "@request.auth.id != ''",
+    "deleteRule": "@request.auth.id != ''"
+  },
+  {
+    "name": "categories",
+    "type": "base",
+    "system": false,
+    "schema": [
+      {
+        "name": "name",
+        "type": "text",
+        "required": true,
+        "unique": true
+      },
+      {
+        "name": "description",
+        "type": "text",
+        "required": false
+      },
+      {
+        "name": "fields",
+        "type": "json",
+        "required": false
+      }
+    ],
+    "listRule": "@request.auth.id != ''",
+    "viewRule": "@request.auth.id != ''",
+    "createRule": "@request.auth.id != ''",
+    "updateRule": "@request.auth.id != ''",
+    "deleteRule": "@request.auth.id != ''"
+  },
+  {
+    "name": "issues",
+    "type": "base",
+    "system": false,
+    "schema": [
+      {
+        "name": "instrumentId",
+        "type": "text",
+        "required": true
+      },
+      {
+        "name": "employeeId",
+        "type": "text",
+        "required": true
+      },
+      {
+        "name": "issuedBy",
+        "type": "text",
+        "required": true
+      },
+      {
+        "name": "issuedAt",
+        "type": "date",
+        "required": true
+      },
+      {
+        "name": "returnedAt",
+        "type": "date",
+        "required": false
+      },
+      {
+        "name": "returnedBy",
+        "type": "text",
+        "required": false
+      },
+      {
+        "name": "note",
+        "type": "text",
+        "required": false
+      },
+      {
+        "name": "originalWarehouseId",
+        "type": "text",
+        "required": false
+      }
+    ],
+    "listRule": "@request.auth.id != ''",
+    "viewRule": "@request.auth.id != ''",
+    "createRule": "@request.auth.id != ''",
+    "updateRule": "@request.auth.id != ''",
+    "deleteRule": "@request.auth.id != ''"
+  },
+  {
+    "name": "sendoffs",
+    "type": "base",
+    "system": false,
+    "schema": [
+      {
+        "name": "instrumentId",
+        "type": "text",
+        "required": true
+      },
+      {
+        "name": "destination",
+        "type": "text",
+        "required": true
+      },
+      {
+        "name": "sentAt",
+        "type": "date",
+        "required": true
+      },
+      {
+        "name": "responsibleId",
+        "type": "text",
+        "required": false
+      },
+      {
+        "name": "expectedReturnDate",
+        "type": "date",
+        "required": false
+      },
+      {
+        "name": "status",
+        "type": "select",
+        "required": true,
+        "options": {
+          "values": ["sent", "returned"],
+          "maxSelect": 1
+        }
+      },
+      {
+        "name": "returnedAt",
+        "type": "date",
+        "required": false
+      },
+      {
+        "name": "protocolId",
+        "type": "text",
+        "required": false
+      },
+      {
+        "name": "comment",
+        "type": "text",
+        "required": false
+      }
+    ],
+    "listRule": "@request.auth.id != ''",
+    "viewRule": "@request.auth.id != ''",
+    "createRule": "@request.auth.id != ''",
+    "updateRule": "@request.auth.id != ''",
+    "deleteRule": "@request.auth.id != ''"
+  },
+  {
+    "name": "protocols",
+    "type": "base",
+    "system": false,
+    "schema": [
+      {
+        "name": "deviceId",
+        "type": "text",
+        "required": true
+      },
+      {
+        "name": "instrumentInventoryNumber",
+        "type": "text",
+        "required": true
+      },
+      {
+        "name": "instrumentName",
+        "type": "text",
+        "required": true
+      },
+      {
+        "name": "operatorId",
+        "type": "text",
+        "required": true
+      },
+      {
+        "name": "dateStart",
+        "type": "date",
+        "required": true
+      },
+      {
+        "name": "dateEnd",
+        "type": "date",
+        "required": false
+      },
+      {
+        "name": "status",
+        "type": "select",
+        "required": true,
+        "options": {
+          "values": ["draft", "in_progress", "completed", "rejected"],
+          "maxSelect": 1
+        }
+      },
+      {
+        "name": "result",
+        "type": "select",
+        "required": false,
+        "options": {
+          "values": ["pass", "fail"],
+          "maxSelect": 1
+        }
+      },
+      {
+        "name": "points",
+        "type": "json",
+        "required": false
+      },
+      {
+        "name": "conditions",
+        "type": "json",
+        "required": false
+      },
+      {
+        "name": "notes",
+        "type": "text",
+        "required": false
+      },
+      {
+        "name": "rejectionReason",
+        "type": "text",
+        "required": false
+      }
+    ],
+    "listRule": "@request.auth.id != ''",
+    "viewRule": "@request.auth.id != ''",
+    "createRule": "@request.auth.id != ''",
+    "updateRule": "@request.auth.id != ''",
+    "deleteRule": "@request.auth.id != ''"
+  },
+  {
+    "name": "operations",
+    "type": "base",
+    "system": false,
+    "schema": [
+      {
+        "name": "timestamp",
+        "type": "date",
+        "required": true
+      },
+      {
+        "name": "userId",
+        "type": "text",
+        "required": true
+      },
+      {
+        "name": "action",
+        "type": "text",
+        "required": true
+      },
+      {
+        "name": "entityType",
+        "type": "text",
+        "required": true
+      },
+      {
+        "name": "entityId",
+        "type": "text",
+        "required": true
+      },
+      {
+        "name": "details",
+        "type": "text",
+        "required": true
+      }
+    ],
+    "listRule": "@request.auth.id != ''",
+    "viewRule": "@request.auth.id != ''",
+    "createRule": "@request.auth.id != ''",
+    "updateRule": null,
+    "deleteRule": null
+  },
+  {
+    "name": "filters",
+    "type": "base",
+    "system": false,
+    "schema": [
+      {
+        "name": "name",
+        "type": "text",
+        "required": true
+      },
+      {
+        "name": "category",
+        "type": "text",
+        "required": true
+      },
+      {
+        "name": "conditions",
+        "type": "json",
+        "required": false
+      }
+    ],
+    "listRule": "@request.auth.id != ''",
+    "viewRule": "@request.auth.id != ''",
+    "createRule": "@request.auth.id != ''",
+    "updateRule": "@request.auth.id != ''",
+    "deleteRule": "@request.auth.id != ''"
+  }
+]
