@@ -9,7 +9,7 @@ cd /d "%~dp0"
 set "MSG=%~1"
 if "%MSG%"=="" set "MSG=chore: sync %date% %time%"
 
-echo [1/4] Репозиторий: %cd%
+echo [1/5] Репозиторий: %cd%
 git rev-parse --is-inside-work-tree >nul 2>&1
 if errorlevel 1 (
     echo [ОШИБКА] Эта папка - не git-репозиторий.
@@ -24,16 +24,30 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo [2/4] Изменения к отправке:
+echo [2/5] Изменения к отправке:
 git status --short
 
-echo [3/4] Коммит: %MSG%
+echo [3/5] Коммит: %MSG%
 git add -A
 git commit -m "%MSG%"
 if errorlevel 1 echo [ИНФО] Новых изменений нет - коммит пропущен.
 
-echo [4/4] Пуш на GitHub, ветка main...
-git push origin main
+echo [4/5] Проверка имени ветки...
+for /f "tokens=*" %%b in ('git rev-parse --abbrev-ref HEAD') do set "BRANCH=%%b"
+if /i not "%BRANCH%"=="main" (
+    git show-ref --verify --quiet refs/heads/main
+    if errorlevel 1 (
+        echo [ИНФО] Локальная ветка "%BRANCH%" - переименовываю в main...
+        git branch -m main
+    ) else (
+        echo [ОШИБКА] Вы на ветке "%BRANCH%", но локально уже есть main. Разберитесь вручную: git checkout main
+        pause
+        exit /b 1
+    )
+)
+
+echo [5/5] Пуш на GitHub, ветка main...
+git push -u origin main
 if errorlevel 1 (
     echo [ОШИБКА] Пуш не прошёл. Проверьте сеть и учётку: git remote -v
     pause
