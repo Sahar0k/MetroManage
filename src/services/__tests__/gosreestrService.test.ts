@@ -117,9 +117,9 @@ describe('gosreestrService', () => {
 
       const result = await searchByQuery('52797-13');
 
+      // buildSearchQuery: без ведущего wild → trailing wildcard только
       expect(mockFetch).toHaveBeenCalledWith(
-        // `-` экранируется escapeLuceneQuery -> `\-`
-        expect.stringContaining('fq=*52797%5C-13*'),
+        expect.stringContaining('fq=52797%5C-13*'),
         expect.any(Object)
       );
       expect(result).toHaveLength(1);
@@ -149,8 +149,10 @@ describe('gosreestrService', () => {
 
       const result = await searchByQuery('Р2М-18А');
 
+      // buildSearchQuery: partial → trailing wildcard только (без ведущего *)
+      // escapeLuceneQuery экранирует '-': Р2М\-18А*
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('fq=*'),
+        expect.stringContaining('fq=%D0%A02%D0%9C%5C-18%D0%90*'),
         expect.any(Object)
       );
       expect(result).toHaveLength(1);

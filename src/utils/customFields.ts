@@ -109,6 +109,8 @@ export function applyFilters(
 
       const value = instrument.customFields?.[condition.fieldId];
       if (value === undefined || value === null) return false;
+      const numValue = Number(value);
+      if (isNaN(numValue)) return false;
 
       switch (condition.operator) {
         case 'equals':
@@ -116,12 +118,13 @@ export function applyFilters(
         case 'contains':
           return String(value).toLowerCase().includes(String(condition.value).toLowerCase());
         case 'greater':
-          return Number(value) > Number(condition.value);
+          // ≥ — больше или равно
+          return numValue >= Number(condition.value);
         case 'less':
-          return Number(value) < Number(condition.value);
+          // ≤ — меньше или равно
+          return numValue <= Number(condition.value);
         case 'between':
           if (Array.isArray(condition.value) && condition.value.length === 2) {
-            const numValue = Number(value);
             return numValue >= condition.value[0] && numValue <= condition.value[1];
           }
           return false;

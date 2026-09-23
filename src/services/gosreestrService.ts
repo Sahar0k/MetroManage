@@ -112,6 +112,23 @@ export function escapeLuceneQuery(query: string): string {
 }
 
 /**
+ * Построение поискового запроса для подсказок Госреестра.
+ * Если запрос уже содержит '*' или '?' — не модифицируем (пользователь указал wildcard явно).
+ * Иначе: экранируем Lucene-спецсимволы + добавляем trailing wildcard.*.
+ * Пример: 'Р2М' → 'Р2М*' (ищет термы, начинающиеся с Р2М).
+ */
+export function buildSearchQuery(query: string): string {
+  const trimmed = query.trim();
+  // Уже содержит wildcard — оборачиваем в *
+  if (/[*?]/.test(trimmed)) {
+    return `*${escapeLuceneQuery(trimmed)}*`;
+  }
+  // Частичный запрос: trailing wildcard (без ведущего *, т.к. XCDB mit24 плохо обрабатывает leading wild)
+  const escaped = escapeLuceneQuery(trimmed);
+  return `${escaped}*`;
+}
+
+/**
  * Универсальный парсер j_* полей: принимает string|array|object|null → всегда массив
  */
 function parseJField<T>(raw: unknown, itemValidator?: (item: unknown) => boolean): T[] {
@@ -398,9 +415,9 @@ export async function searchByQuery(
   try {
     await waitForRateLimit();
     
-    const escapedQuery = escapeLuceneQuery(query);
+    const searchQ = buildSearchQuery(query);
     const params = new URLSearchParams({
-      fq: `*${escapedQuery}*`,
+      fq: searchQ,
       fl: 'title,number,notation,manufacturers,mit_uuid,is_actual',
       rows: '20',
       sort: 'num1 desc,num2 desc',
